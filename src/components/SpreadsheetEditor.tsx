@@ -33,6 +33,9 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showSavedMessage, setShowSavedMessage] = useState(false);
   
+  // State for direct cell editing via modal
+  const [directEditCell, setDirectEditCell] = useState<{rowId: string, field: 'yes_leads_to' | 'no_leads_to'} | null>(null);
+  
   // Cell edit mode modals
   const [showCellModal, setShowCellModal] = useState(false);
   const [currentCellContent, setCurrentCellContent] = useState('');
@@ -259,14 +262,20 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
     setShowCellModal(true);
   };
 
-  // Save the cell content from the modal
-  const saveCellModalContent = () => {
+  // Function to save cell content and close modal
+  const handleSaveAndCloseModal = () => {
+    // Update the content in state
     if (currentCellField === 'text') {
       handleCellChange(currentRowId, 'text', currentCellContent);
     } else {
       handleResourceChange(currentRowId, currentCellField, currentCellContent);
     }
+    
+    // Close the modal
     setShowCellModal(false);
+    
+    // Then immediately save to database
+    handleSaveRow(currentRowId);
   };
 
   // Initialize resource edits when a row enters edit mode
@@ -289,6 +298,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   
   // Handle resource field changes
   const handleResourceChange = (rowId: string, field: string, value: string | null) => {
+    // Update the resourceEdits state
     setResourceEdits({
       ...resourceEdits,
       [rowId]: {
@@ -395,9 +405,9 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
       // Update rows to reflect new resource IDs
       setRows(rows.map(r => r.id === id ? updatedRow : r));
       
-      // Clean up editing state
-      setIsEditing({...isEditing, [id]: false});
+      // Clear the hasChanges flag and exit edit mode when save is pressed
       setHasChanges({...hasChanges, [id]: false});
+      setIsEditing({...isEditing, [id]: false});
       
       // Update last saved time
       setLastSaved(new Date());
@@ -408,21 +418,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
     }
   };
   
-  const toggleEdit = (id: string) => {
-    const row = rows.find(r => r.id === id);
-    if (row && !isEditing[id]) {
-      initializeResourceEditsForRow(row);
-    }
-    setIsEditing({...isEditing, [id]: !isEditing[id]});
-  };
-
-  // Handle key down events for input fields
-  const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSaveRow(id);
-    }
-  };
+  // We'll use a simpler approach with a modal for editing yes/no cells
 
   const handleDragEnd = async (result: any) => {
     if (!result.destination) return;
@@ -480,7 +476,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   };
   
   // Helper function to get question index by id
-  const getQuestionIndexById = (id: string | null) => {
+  const getQuestionIndexById = (id: string | null | undefined) => {
     if (!id) return "";
     const question = questions.find(q => q.id === id);
     return question ? `${question.order_position + 1}` : "";
@@ -697,6 +693,10 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                       onDragOver={handleRowDragOver}
                       onDrop={(e) => handleRowDrop(e, index)}
                       onDragEnd={handleRowDragEnd}
+                      onClick={() => {
+                        // Toggle edit mode for the row
+                        setIsEditing({...isEditing, [row.id]: !isEditing[row.id]});
+                      }}
                       data-id={row.id}
                       data-index={index}
                     >
@@ -758,13 +758,21 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                         </td>
 
                         {/* Yes leads to cell */}
-                        <td className="px-2 py-1 text-center border border-gray-300">
+                        <td 
+                          className="px-2 py-1 text-center border border-gray-300"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isEditing[row.id]) {
+                              setDirectEditCell({rowId: row.id, field: 'yes_leads_to'});
+                            }
+                          }}
+                        >
                           {isEditing[row.id] ? (
                             <select
                               value={row.yes_leads_to || ''}
-                              onChange={(e) => handleCellChange(row.id, 'yes_leads_to', e.target.value || null)}
-                              onKeyDown={(e) => handleKeyDown(e, row.id)}
+                              onChange={(e) => handleCellChange(row.id, 'yes_leads_to', e.target.value || undefined)}
                               className="w-full border rounded-md p-1 text-sm"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               <option value="">-</option>
                               {questions
@@ -777,23 +785,28 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                               }
                             </select>
                           ) : (
-                            <div 
-                              className="text-sm text-center cursor-pointer hover:text-indigo-600 font-medium"
-                              onClick={() => toggleEdit(row.id)}
-                            >
+                            <div className="text-sm text-center cursor-pointer hover:text-indigo-600 font-medium">
                               {getQuestionIndexById(row.yes_leads_to)}
                             </div>
                           )}
                         </td>
 
                         {/* No leads to cell */}
-                        <td className="px-2 py-1 text-center border border-gray-300">
+                        <td 
+                          className="px-2 py-1 text-center border border-gray-300"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isEditing[row.id]) {
+                              setDirectEditCell({rowId: row.id, field: 'no_leads_to'});
+                            }
+                          }}
+                        >
                           {isEditing[row.id] ? (
                             <select
                               value={row.no_leads_to || ''}
-                              onChange={(e) => handleCellChange(row.id, 'no_leads_to', e.target.value || null)}
-                              onKeyDown={(e) => handleKeyDown(e, row.id)}
+                              onChange={(e) => handleCellChange(row.id, 'no_leads_to', e.target.value || undefined)}
                               className="w-full border rounded-md p-1 text-sm"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               <option value="">-</option>
                               {questions
@@ -806,10 +819,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                               }
                             </select>
                           ) : (
-                            <div 
-                              className="text-sm text-center cursor-pointer hover:text-indigo-600 font-medium"
-                              onClick={() => toggleEdit(row.id)}
-                            >
+                            <div className="text-sm text-center cursor-pointer hover:text-indigo-600 font-medium">
                               {getQuestionIndexById(row.no_leads_to)}
                             </div>
                           )}
@@ -1070,10 +1080,11 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                 minHeight={300}
                 placeholder="Enter content..."
                 onKeyDown={(e) => {
-                  // Save on Enter (without Shift) or Ctrl+Enter or Cmd+Enter
-                  if (e.key === 'Enter' && (!e.shiftKey || e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    saveCellModalContent();
+                  // Handle Enter key (without shift)
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    // The ReactQuillEditor component has already updated the value
+                    // and prevented default behavior, so we just need to save
+                    handleSaveAndCloseModal();
                   }
                 }}
               />
@@ -1087,7 +1098,59 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
               Cancel
             </button>
             <button
-              onClick={saveCellModalContent}
+              onClick={handleSaveAndCloseModal}
+              className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700"
+            >
+              Save
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Yes/No Leads To Modal */}
+      {directEditCell && (
+        <Modal
+          isOpen={Boolean(directEditCell)}
+          onClose={() => setDirectEditCell(null)}
+          title={`Edit ${directEditCell.field === 'yes_leads_to' ? 'Yes' : 'No'} Leads To`}
+        >
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select question to link to:
+            </label>
+            <select
+              value={rows.find(r => r.id === directEditCell.rowId)?.[directEditCell.field] || ''}
+              onChange={(e) => {
+                handleCellChange(directEditCell.rowId, directEditCell.field, e.target.value || undefined);
+              }}
+              className="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              autoFocus
+            >
+              <option value="">- None -</option>
+              {questions
+                .filter(q => q.id !== directEditCell.rowId)
+                .map(q => (
+                  <option key={q.id} value={q.id}>
+                    Question {q.order_position + 1}
+                  </option>
+                ))
+              }
+            </select>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <button
+              onClick={() => setDirectEditCell(null)}
+              className="bg-gray-500 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (directEditCell) {
+                  handleSaveRow(directEditCell.rowId);
+                  setDirectEditCell(null);
+                }
+              }}
               className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700"
             >
               Save

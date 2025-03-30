@@ -111,6 +111,10 @@ const ReactQuillEditor = forwardRef<ReactQuillEditorRef, ReactQuillEditorProps>(
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // If Enter is pressed without Shift (which would create a new line)
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      // Make sure we update the parent with the latest value before handling Enter
+      onChange(editorValue);
+      
+      // Now prevent default and let parent handle it
       e.preventDefault(); // Prevent default behavior
       e.stopPropagation(); // Stop event from bubbling up
       
