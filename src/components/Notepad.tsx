@@ -19,9 +19,9 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
       try {
         const { data, error } = await supabase
           .from('survey_notes')
-          .select('content')
+          .select('content, updated_at')
           .eq('survey_id', surveyId)
-          .single();
+          .maybeSingle();
         
         if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
           console.error('Error loading notes:', error);
@@ -30,9 +30,13 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
         
         if (data) {
           setNotes(data.content);
+          setLastSaved(new Date(data.updated_at));
+          console.log('Notes loaded successfully:', data);
+        } else {
+          console.log('No notes found for this survey');
         }
       } catch (error) {
-        console.error('Error loading notes:', error);
+        console.error('Error in loadNotes:', error);
       }
     };
     
@@ -92,24 +96,70 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
   
   const saveNotes = async () => {
     try {
-      const { error } = await supabase
+      // Check if the current user has permission to modify this survey
+      const { error: surveyError } = await supabase
+        .from('surveys')
+        .select('created_by')
+        .eq('id', surveyId)
+        .single();
+      
+      if (surveyError) {
+        console.error('Error checking survey permissions:', surveyError);
+        throw new Error('Could not verify permissions for this survey');
+      }
+      
+      // First check if a note exists for this survey
+      const { data: existingNote, error: fetchError } = await supabase
         .from('survey_notes')
-        .upsert({
-          survey_id: surveyId,
-          content: notes,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'survey_id'
-        });
+        .select('id')
+        .eq('survey_id', surveyId)
+        .maybeSingle();
+      
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is 'not found'
+        console.error('Error checking for existing note:', fetchError);
+        throw fetchError;
+      }
+      
+      let error;
+      
+      if (existingNote) {
+        // Update existing note
+        const { error: updateError } = await supabase
+          .from('survey_notes')
+          .update({
+            content: notes,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingNote.id);
+          
+        error = updateError;
+      } else {
+        // Insert new note
+        const { error: insertError } = await supabase
+          .from('survey_notes')
+          .insert({
+            survey_id: surveyId,
+            content: notes,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          
+        error = insertError;
+      }
       
       if (error) {
+        console.error('Error saving notes:', error);
+        if (error.code === 'PGRST109') {
+          throw new Error('You do not have permission to edit notes for this survey');
+        }
         throw error;
       }
       
       setLastSaved(new Date());
       setShowSavedMessage(true);
     } catch (error) {
-      console.error('Error saving notes:', error);
+      console.error('Error in saveNotes function:', error);
+      alert(`Failed to save notes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
   
