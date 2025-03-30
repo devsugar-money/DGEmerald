@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, FileText } from './IconProvider';
+import { X, Save } from './IconProvider';
 import { supabase } from '../lib/supabase';
 
 interface NotepadProps {
@@ -11,7 +11,7 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
   const [notes, setNotes] = useState<string>('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showSavedMessage, setShowSavedMessage] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   
   // Load notes when component mounts
   useEffect(() => {
@@ -60,10 +60,10 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
     }
   }, [showSavedMessage]);
   
-  // Focus textarea when opened
+  // Focus editor when opened
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.focus();
+    if (editorRef.current) {
+      editorRef.current.focus();
     }
   }, []);
   
@@ -90,6 +90,7 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
     }
   };
   
+  // Handle keyboard shortcuts
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Save on Ctrl+S or Cmd+S
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -102,49 +103,75 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
     }
   };
   
+  // Handle content editable changes
+  const handleContentChange = () => {
+    if (editorRef.current) {
+      setNotes(editorRef.current.innerHTML);
+    }
+  };
+  
+  // Format date for Apple-like display
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      hour: 'numeric', 
+      minute: 'numeric',
+      hour12: true 
+    }).format(date);
+  };
+  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b">
+    <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-50 flex items-center justify-center p-4" 
+         onKeyDown={handleKeyDown}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden" 
+           style={{ boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)', border: '1px solid rgba(0, 0, 0, 0.1)' }}>
+        {/* Header - Apple Notes style */}
+        <div className="flex items-center justify-between px-6 py-3" 
+             style={{ backgroundColor: '#F5F5F5', borderBottom: '1px solid #E0E0E0' }}>
           <div className="flex items-center">
-            <FileText size={18} className="text-indigo-600 mr-2" />
-            <h2 className="text-lg font-semibold">Notepad</h2>
-          </div>
-          <div className="flex items-center space-x-2">
-            {showSavedMessage && (
-              <span className="text-green-600 text-sm flex items-center">
-                Saved
-              </span>
-            )}
+            <h2 className="text-base font-medium text-gray-800">Notes</h2>
             {lastSaved && (
-              <span className="text-xs text-gray-500">
-                Last saved: {lastSaved.toLocaleTimeString()}
+              <span className="ml-3 text-xs text-gray-500">
+                {showSavedMessage ? 
+                  <span className="text-green-600 font-medium">Saved</span> : 
+                  `Edited ${formatDate(lastSaved)}`}
               </span>
             )}
+          </div>
+          <div className="flex items-center space-x-1">
             <button
               onClick={saveNotes}
-              className="p-1 hover:bg-gray-100 rounded-full"
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded transition-colors"
               title="Save (Ctrl+S)"
             >
-              <Save size={18} className="text-indigo-600" />
+              <Save size={16} />
             </button>
             <button
               onClick={onClose}
-              className="p-1 hover:bg-gray-100 rounded-full"
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded transition-colors"
               title="Close (Esc)"
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
         </div>
-        <div className="flex-grow p-4 overflow-hidden">
-          <textarea
-            ref={textareaRef}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-full h-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-            placeholder="Type your notes here..."
+        
+        {/* Content area - Apple Notes style */}
+        <div className="flex-1 overflow-auto" style={{ backgroundColor: '#FFFDF7' }}>
+          <div
+            ref={editorRef}
+            contentEditable
+            onInput={handleContentChange}
+            className="min-h-full p-6 outline-none text-gray-800"
+            style={{ 
+              minHeight: '300px',
+              fontSize: '15px',
+              lineHeight: '1.6',
+              fontFamily: '"-apple-system",-apple-system,BlinkMacSystemFont,"Segoe UI"',
+              caretColor: '#000'
+            }}
+            dangerouslySetInnerHTML={{ __html: notes }}
           />
         </div>
       </div>

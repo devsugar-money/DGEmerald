@@ -544,10 +544,11 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           <h2 className="text-lg font-semibold">Decision Tree Spreadsheet</h2>
           <button
             onClick={() => setShowNotepad(true)}
-            className="text-indigo-600 hover:bg-indigo-50 p-1 rounded-full flex items-center text-sm"
+            className="text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-md flex items-center text-sm gap-1.5"
             title="Open Notepad"
           >
             <FileText size={16} />
+            <span>Notepad</span>
           </button>
         </div>
         <div className="flex items-center gap-4">
