@@ -120,71 +120,47 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
         throw new Error('You must be logged in to save notes');
       }
       
-      // Try direct upsert approach
-      let error;
-      try {
-        const result = await supabase
+      // First check if a record exists for this survey
+      const { data: existingNote, error: checkError } = await supabase
+        .from('survey_notes')
+        .select('id')
+        .eq('survey_id', surveyId)
+        .maybeSingle();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking for existing note:', checkError);
+      }
+      
+      let saveError = null;
+      
+      if (existingNote) {
+        // Update existing record
+        const { error } = await supabase
           .from('survey_notes')
-          .upsert({
+          .update({
+            content: notes,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingNote.id);
+        
+        saveError = error;
+      } else {
+        // Insert new record
+        const { error } = await supabase
+          .from('survey_notes')
+          .insert({
             survey_id: surveyId,
             content: notes,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
-        error = result.error;
-      } catch (err) {
-        console.error('Upsert operation failed:', err);
-        error = err instanceof Error ? err : new Error('Unknown error during upsert');
+        
+        saveError = error;
       }
       
-      if (error) {
-        console.error('Error saving notes:', error);
-        
-        // Try a different approach if the first one fails
-        // Check if it's a PostgrestError with code property
-        const pgError = error as { code?: string };
-        if (pgError.code === 'PGRST109' || pgError.code === '42501') {
-          console.log('Permission error, trying alternative approach');
-          
-          // Try a direct insert approach
-          let altError;
-          try {
-            // First try insert
-            const insertResult = await supabase
-              .from('survey_notes')
-              .insert({
-                survey_id: surveyId,
-                content: notes,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              });
-            
-            altError = insertResult.error;
-            
-            // If insert fails, try update
-            if (altError) {
-              const updateResult = await supabase
-                .from('survey_notes')
-                .update({
-                  content: notes,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('survey_id', surveyId);
-              
-              altError = updateResult.error;
-            }
-          } catch (err) {
-            console.error('Alternative approach failed:', err);
-            altError = err instanceof Error ? err : new Error('Unknown error during alternative approach');
-          }
-            
-          if (altError) {
-            console.error('Alternative approach also failed:', altError);
-            throw altError;
-          }
-        } else {
-          throw error;
-        }
+      if (saveError) {
+        console.error('Error saving notes:', saveError);
+        throw saveError;
       }
       
       setLastSaved(new Date());
