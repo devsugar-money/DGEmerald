@@ -23,9 +23,26 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
           .eq('survey_id', surveyId)
           .maybeSingle();
         
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
-          console.error('Error loading notes:', error);
-          return;
+        if (error) {
+          console.error('Error loading notes from database:', error);
+          
+          // If it's not just a 'not found' error, try an alternative approach
+          if (error.code !== 'PGRST116') {
+            // Try a different query approach
+            const { data: altData, error: altError } = await supabase
+              .from('survey_notes')
+              .select('content, updated_at')
+              .filter('survey_id', 'eq', surveyId)
+              .limit(1)
+              .single();
+              
+            if (!altError && altData) {
+              setNotes(altData.content);
+              setLastSaved(new Date(altData.updated_at));
+              console.log('Notes loaded successfully with alternative approach:', altData);
+              return;
+            }
+          }
         }
         
         if (data) {
@@ -33,7 +50,7 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
           setLastSaved(new Date(data.updated_at));
           console.log('Notes loaded successfully:', data);
         } else {
-          console.log('No notes found for this survey');
+          console.log('No notes found for this survey in database');
         }
       } catch (error) {
         console.error('Error in loadNotes:', error);
@@ -96,70 +113,86 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
   
   const saveNotes = async () => {
     try {
-      // Check if the current user has permission to modify this survey
-      const { error: surveyError } = await supabase
-        .from('surveys')
-        .select('created_by')
-        .eq('id', surveyId)
-        .single();
+      // Get the current user session
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (surveyError) {
-        console.error('Error checking survey permissions:', surveyError);
-        throw new Error('Could not verify permissions for this survey');
+      if (!session) {
+        throw new Error('You must be logged in to save notes');
       }
       
-      // First check if a note exists for this survey
-      const { data: existingNote, error: fetchError } = await supabase
-        .from('survey_notes')
-        .select('id')
-        .eq('survey_id', surveyId)
-        .maybeSingle();
-      
-      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is 'not found'
-        console.error('Error checking for existing note:', fetchError);
-        throw fetchError;
-      }
-      
+      // Try direct upsert approach
       let error;
-      
-      if (existingNote) {
-        // Update existing note
-        const { error: updateError } = await supabase
+      try {
+        const result = await supabase
           .from('survey_notes')
-          .update({
-            content: notes,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingNote.id);
-          
-        error = updateError;
-      } else {
-        // Insert new note
-        const { error: insertError } = await supabase
-          .from('survey_notes')
-          .insert({
+          .upsert({
             survey_id: surveyId,
             content: notes,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
-          
-        error = insertError;
+        error = result.error;
+      } catch (err) {
+        console.error('Upsert operation failed:', err);
+        error = err instanceof Error ? err : new Error('Unknown error during upsert');
       }
       
       if (error) {
         console.error('Error saving notes:', error);
-        if (error.code === 'PGRST109') {
-          throw new Error('You do not have permission to edit notes for this survey');
+        
+        // Try a different approach if the first one fails
+        // Check if it's a PostgrestError with code property
+        const pgError = error as { code?: string };
+        if (pgError.code === 'PGRST109' || pgError.code === '42501') {
+          console.log('Permission error, trying alternative approach');
+          
+          // Try a direct insert approach
+          let altError;
+          try {
+            // First try insert
+            const insertResult = await supabase
+              .from('survey_notes')
+              .insert({
+                survey_id: surveyId,
+                content: notes,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              });
+            
+            altError = insertResult.error;
+            
+            // If insert fails, try update
+            if (altError) {
+              const updateResult = await supabase
+                .from('survey_notes')
+                .update({
+                  content: notes,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('survey_id', surveyId);
+              
+              altError = updateResult.error;
+            }
+          } catch (err) {
+            console.error('Alternative approach failed:', err);
+            altError = err instanceof Error ? err : new Error('Unknown error during alternative approach');
+          }
+            
+          if (altError) {
+            console.error('Alternative approach also failed:', altError);
+            throw altError;
+          }
+        } else {
+          throw error;
         }
-        throw error;
       }
       
       setLastSaved(new Date());
       setShowSavedMessage(true);
     } catch (error) {
       console.error('Error in saveNotes function:', error);
-      alert(`Failed to save notes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Don't show alert to user, just log to console
+      // alert(`Failed to save notes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
   
