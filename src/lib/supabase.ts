@@ -27,3 +27,4 @@ export type Action = Tables['actions']['Row'];
 export type Terminate = Tables['terminates']['Row'];
 export type Session = Tables['sessions']['Row'];
 export type Response = Tables['responses']['Row'];
+export type SurveyNote = Tables['survey_notes']['Row'];

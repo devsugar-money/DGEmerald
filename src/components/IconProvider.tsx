@@ -74,5 +74,6 @@ export const {
   ArrowDownLeft,
   UserPlus,
   LogIn,
-  PlusCircle
+  PlusCircle,
+  Save
 } = Icons;

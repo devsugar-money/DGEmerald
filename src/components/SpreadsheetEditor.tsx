@@ -1,8 +1,9 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useSurveyStore } from '../store/surveyStore';
-import { Plus, AlertCircle, ChevronDown, ArrowUpDown, CheckCircle, Trash2 } from '../components/IconProvider';
+import { Plus, AlertCircle, ChevronDown, ArrowUpDown, CheckCircle, Trash2, FileText } from '../components/IconProvider';
 // Removed DroppableArea import as we're using custom drag and drop
 import Modal from './Modal';
+import Notepad from './Notepad';
 
 // Lazy load RichTextEditor which brings in React-Quill
 const RichTextEditor = lazy(() => import('./RichTextEditor'));
@@ -41,6 +42,9 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Notepad state
+  const [showNotepad, setShowNotepad] = useState(false);
 
   // Resource editing state
   const [resourceEdits, setResourceEdits] = useState<Record<string, {
@@ -536,7 +540,16 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   return (
     <div className="overflow-x-auto">
       <div className="mb-4 flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Decision Tree Spreadsheet</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Decision Tree Spreadsheet</h2>
+          <button
+            onClick={() => setShowNotepad(true)}
+            className="text-indigo-600 hover:bg-indigo-50 p-1 rounded-full flex items-center text-sm"
+            title="Open Notepad"
+          >
+            <FileText size={16} />
+          </button>
+        </div>
         <div className="flex items-center gap-4">
           {showSavedMessage && (
             <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm">
@@ -1116,6 +1129,14 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           </button>
         </div>
       </Modal>
+      
+      {/* Notepad Component */}
+      {showNotepad && (
+        <Notepad 
+          surveyId={surveyId}
+          onClose={() => setShowNotepad(false)}
+        />
+      )}
     </div>
   );
 };

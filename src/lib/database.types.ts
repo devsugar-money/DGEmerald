@@ -259,6 +259,37 @@ export interface Database {
         }
         Relationships: []
       }
+      survey_notes: {
+        Row: {
+          id: string
+          survey_id: string
+          content: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          survey_id: string
+          content: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          survey_id?: string
+          content?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_notes_survey_id_fkey"
+            columns: ["survey_id"]
+            referencedRelation: "surveys"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
