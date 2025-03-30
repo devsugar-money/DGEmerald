@@ -1,4 +1,4 @@
-import { StrictMode, lazy, Suspense } from 'react';
+import React, { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import App from './App.tsx';
@@ -13,8 +13,12 @@ const LoadingFallback = () => (
 );
 
 // Prefetch critical components
-const prefetchComponent = (importFn: () => Promise<any>) => {
+type ComponentModule = { default: React.ComponentType<any> };
+
+const prefetchComponent = (importFn: () => Promise<ComponentModule>) => {
   const promise = importFn();
+  // Preload the component
+  promise.catch(() => {});
   return lazy(() => promise);
 };
 
@@ -111,14 +115,16 @@ const router = createBrowserRouter([
   },
 ]);
 
-// Start preloading the Home component as soon as possible
-Home.preload?.();
+// Preload critical components
+// The preloading happens in the prefetchComponent function
+// No need to call preload methods
 
-// Add preloading for critical paths
+// Add preloading for other components when idle
 if (window.requestIdleCallback) {
   window.requestIdleCallback(() => {
-    Login.preload?.();
-    Register.preload?.();
+    // Preload other components when browser is idle
+    import('./pages/Dashboard.tsx').catch(() => {});
+    import('./pages/SurveyBuilder.tsx').catch(() => {});
   });
 }
 
