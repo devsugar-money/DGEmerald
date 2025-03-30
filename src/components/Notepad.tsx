@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save } from './IconProvider';
+import { X, Save, Bold, List, CheckSquare, Italic } from './IconProvider';
 import { supabase } from '../lib/supabase';
 
 interface NotepadProps {
@@ -60,12 +60,35 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
     }
   }, [showSavedMessage]);
   
-  // Focus editor when opened
+  // Focus editor and place cursor at the end when opened
   useEffect(() => {
     if (editorRef.current) {
+      // Focus the editor
       editorRef.current.focus();
+      
+      // Place cursor at the end of the content
+      const range = document.createRange();
+      const selection = window.getSelection();
+      
+      if (editorRef.current.childNodes.length > 0) {
+        const lastNode = editorRef.current.childNodes[editorRef.current.childNodes.length - 1];
+        if (lastNode.nodeType === Node.TEXT_NODE) {
+          range.setStart(lastNode, lastNode.textContent?.length || 0);
+        } else {
+          range.setStartAfter(lastNode);
+        }
+      } else {
+        range.setStart(editorRef.current, 0);
+      }
+      
+      range.collapse(true);
+      
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
     }
-  }, []);
+  }, [notes]);
   
   const saveNotes = async () => {
     try {
@@ -110,6 +133,49 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
     }
   };
   
+  // Format text as bold
+  const formatBold = () => {
+    document.execCommand('bold', false);
+    editorRef.current?.focus();
+  };
+  
+  // Format text as italic
+  const formatItalic = () => {
+    document.execCommand('italic', false);
+    editorRef.current?.focus();
+  };
+  
+  // Insert a bullet list
+  const insertBulletList = () => {
+    document.execCommand('insertUnorderedList', false);
+    editorRef.current?.focus();
+  };
+  
+  // Insert a checkbox
+  const insertCheckbox = () => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.style.marginRight = '5px';
+      range.insertNode(checkbox);
+      // Move cursor after checkbox
+      range.setStartAfter(checkbox);
+      range.setEndAfter(checkbox);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      editorRef.current?.focus();
+    } else {
+      // If no selection, insert at the end
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.style.marginRight = '5px';
+      editorRef.current?.appendChild(checkbox);
+      editorRef.current?.focus();
+    }
+  };
+  
   // Format date for Apple-like display
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', { 
@@ -124,8 +190,8 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-50 flex items-center justify-center p-4" 
          onKeyDown={handleKeyDown}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden" 
-           style={{ boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)', border: '1px solid rgba(0, 0, 0, 0.1)' }}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden" 
+           style={{ boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)', border: '1px solid rgba(0, 0, 0, 0.1)', width: 'calc(100% - 2rem)' }}>
         {/* Header - Apple Notes style */}
         <div className="flex items-center justify-between px-6 py-3" 
              style={{ backgroundColor: '#F5F5F5', borderBottom: '1px solid #E0E0E0' }}>
@@ -139,13 +205,14 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
               </span>
             )}
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-2">
             <button
               onClick={saveNotes}
-              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded transition-colors"
+              className="px-3 py-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded transition-colors flex items-center gap-1.5"
               title="Save (Ctrl+S)"
             >
               <Save size={16} />
+              <span>Save</span>
             </button>
             <button
               onClick={onClose}
@@ -153,6 +220,41 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
               title="Close (Esc)"
             >
               <X size={16} />
+            </button>
+          </div>
+        </div>
+        
+        {/* Formatting toolbar - Apple Notes style */}
+        <div className="flex items-center px-4 py-1.5 border-b border-gray-100" style={{ backgroundColor: '#F9F9F9' }}>
+          <div className="flex space-x-1">
+            <button 
+              onClick={formatBold} 
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors" 
+              title="Bold"
+            >
+              <Bold size={16} />
+            </button>
+            <button 
+              onClick={formatItalic} 
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors" 
+              title="Italic"
+            >
+              <Italic size={16} />
+            </button>
+            <span className="mx-1 text-gray-300">|</span>
+            <button 
+              onClick={insertBulletList} 
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors" 
+              title="Bullet List"
+            >
+              <List size={16} />
+            </button>
+            <button 
+              onClick={insertCheckbox} 
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors" 
+              title="Checkbox"
+            >
+              <CheckSquare size={16} />
             </button>
           </div>
         </div>
@@ -171,7 +273,20 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
               fontFamily: '"-apple-system",-apple-system,BlinkMacSystemFont,"Segoe UI"',
               caretColor: '#000'
             }}
-            dangerouslySetInnerHTML={{ __html: notes }}
+            dangerouslySetInnerHTML={{ __html: notes || '<div style="color: #aaa; pointer-events: none;">Type your notes here...</div>' }}
+            onFocus={() => {
+              // Clear placeholder text when focusing empty editor
+              if (editorRef.current && editorRef.current.innerHTML.includes('Type your notes here...')) {
+                editorRef.current.innerHTML = '';
+              }
+            }}
+            onBlur={() => {
+              // Restore placeholder text when blurring empty editor
+              if (editorRef.current && !editorRef.current.textContent?.trim()) {
+                editorRef.current.innerHTML = '<div style="color: #aaa; pointer-events: none;">Type your notes here...</div>';
+                setNotes('');
+              }
+            }}
           />
         </div>
       </div>

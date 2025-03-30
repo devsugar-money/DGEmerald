@@ -75,5 +75,10 @@ export const {
   UserPlus,
   LogIn,
   PlusCircle,
-  Save
+  Save,
+  Bold,
+  List,
+  CheckSquare,
+  Italic,
+  AlignLeft
 } = Icons;
