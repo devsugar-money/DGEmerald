@@ -1,0 +1,95 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#f0f4fa',
+          100: '#d9e2f5',
+          200: '#b3c6eb',
+          300: '#8ca9e0',
+          400: '#668dd6',
+          500: '#4f71cc',
+          600: '#4a66c0',
+          700: '#465bc2',
+          800: '#4155ab',
+          900: '#3a4889',
+        },
+        secondary: {
+          50: '#ebf8ff',
+          100: '#d6f0ff',
+          200: '#ade1ff',
+          300: '#85d1ff',
+          400: '#5cb8ff',
+          500: '#3499fd',
+          600: '#2078f4',
+          700: '#1d63dd',
+          800: '#1e51b3',
+          900: '#1e468c',
+        },
+        tertiary: {
+          50: '#f2fbf8',
+          100: '#d3f2e8',
+          200: '#a8e8d5',
+          300: '#74d8bd',
+          400: '#42c2a2',
+          500: '#2aa889',
+          600: '#208a70',
+          700: '#1d6f5c',
+          800: '#1c594b',
+          900: '#1a4a3f',
+        },
+        success: {
+          50: '#f0fdf4',
+          100: '#dcfce7',
+          200: '#bbf7d0',
+          300: '#86efac',
+          400: '#4ade80',
+          500: '#22c55e',
+          600: '#16a34a',
+          700: '#15803d',
+          800: '#166534',
+          900: '#14532d',
+        },
+        warning: {
+          50: '#fff7ed',
+          100: '#ffedd5',
+          200: '#fed7aa',
+          300: '#fdba74',
+          400: '#fb923c',
+          500: '#f97316',
+          600: '#ea580c',
+          700: '#c2410c',
+          800: '#9a3412',
+          900: '#7c2d12',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        card: '0 4px 15px 0 rgba(0, 0, 0, 0.05)',
+        modal: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+      },
+      borderRadius: {
+        card: '12px',
+      },
+    },
+  },
+  plugins: [],
+  // Optimize Tailwind CSS output
+  future: {
+    hoverOnlyWhenSupported: true,
+    respectDefaultRingColorOpacity: true,
+  },
+  // Safelist critical classes that might be dynamically constructed
+  safelist: [
+    'bg-success-50',
+    'text-success-700',
+    'border-success-200',
+    'bg-red-50',
+    'text-red-700',
+    'border-red-200',
+  ],
+};
