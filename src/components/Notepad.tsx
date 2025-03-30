@@ -179,6 +179,12 @@ const Notepad: React.FC<NotepadProps> = ({ surveyId, onClose }) => {
       e.preventDefault();
       saveNotes();
     }
+    // Save on Enter
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // Allow shift+enter for new lines
+      e.preventDefault();
+      saveNotes();
+    }
     // Close on Escape
     if (e.key === 'Escape') {
       onClose();

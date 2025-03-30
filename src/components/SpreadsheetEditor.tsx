@@ -1070,8 +1070,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                 minHeight={300}
                 placeholder="Enter content..."
                 onKeyDown={(e) => {
-                  // Save on Ctrl+Enter or Cmd+Enter
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  // Save on Enter (without Shift) or Ctrl+Enter or Cmd+Enter
+                  if (e.key === 'Enter' && (!e.shiftKey || e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
                     saveCellModalContent();
                   }

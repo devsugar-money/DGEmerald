@@ -109,7 +109,15 @@ const ReactQuillEditor = forwardRef<ReactQuillEditorRef, ReactQuillEditorProps>(
   ];
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (onKeyDown) {
+    // If Enter is pressed without Shift (which would create a new line)
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault(); // Prevent default behavior
+      e.stopPropagation(); // Stop event from bubbling up
+      
+      if (onKeyDown) {
+        onKeyDown(e);
+      }
+    } else if (onKeyDown) {
       onKeyDown(e);
     }
   };
