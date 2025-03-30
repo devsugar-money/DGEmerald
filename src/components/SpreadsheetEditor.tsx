@@ -104,7 +104,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   
   const handleAddRow = async () => {
     try {
-      const newQuestion = await createQuestion(surveyId, "New Question", rows.length);
+      const newQuestion = await createQuestion(surveyId, "", rows.length);
       setRows([...rows, {
         id: newQuestion.id,
         text: newQuestion.text,
