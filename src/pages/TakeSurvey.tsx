@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useSessionStore } from '../store/sessionStore';
@@ -11,7 +11,7 @@ const TakeSurvey = () => {
   const { user } = useAuthStore();
   const { 
     activeSurvey, currentQuestion, progress, responses, questions,
-    startSurvey, answerQuestion, updateAnswer, resetSurvey, navigateToQuestion,
+    startSurvey, answerQuestion, resetSurvey, navigateToQuestion,
     actionPlan, terminateMessage, loading, error
   } = useSessionStore();
   const navigate = useNavigate();
@@ -166,7 +166,7 @@ const TakeSurvey = () => {
       </div>
       
       {/* Progress Bar */}
-      <div className="mb-6">
+      <div className="mb-6 max-w-2xl mx-auto">
         <div className="h-2 bg-gray-300 rounded-full overflow-hidden">
           <div 
             className="h-full bg-primary-600 rounded-full" 
@@ -176,15 +176,15 @@ const TakeSurvey = () => {
       </div>
       
       {/* Main Content with Learn Button */}
-      <div className="relative">
-        {/* Question Box (Full Width) */}
-        <div className="bg-white rounded-card shadow-card p-6 md:p-8 mb-6">
+      <div className="relative max-w-2xl mx-auto">
+        {/* Question Box (Less Wide) */}
+        <div className="bg-white rounded-card shadow-card p-6 md:p-8 mb-6 min-h-[calc(100%*1.93)] flex flex-col">
           <h2 className="text-xl md:text-2xl font-medium text-primary-700 mb-6 md:mb-8">
             {currentQuestion.text}
           </h2>
           
           {/* Answer buttons with fully rounded corners */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-auto">
             <button
               onClick={() => handleAnswer(true)}
               className="bg-primary-600 text-white text-lg md:text-xl py-3 px-4 rounded-full hover:bg-primary-700 transition-colors"
@@ -203,7 +203,7 @@ const TakeSurvey = () => {
         
         {/* Learn Button (Positioned to the right) */}
         {currentQuestion.learn_id && (
-          <div className="absolute top-4 -right-4 md:right-[-100px] hidden md:block">
+          <div className="absolute top-0 right-0 translate-x-[calc(100%+24px)] hidden md:block">
             <button
               onClick={handleShowLearn}
               className="bg-white border border-gray-300 text-tertiary-700 rounded-full py-3 px-4 hover:bg-gray-50 transition-colors flex items-center shadow-sm whitespace-nowrap"
@@ -217,7 +217,7 @@ const TakeSurvey = () => {
       
       {/* Hint Button (Bottom) */}
       {currentQuestion.hint_id && (
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center mb-6 max-w-2xl mx-auto">
           <button
             onClick={handleShowHint}
             className="bg-white border border-gray-300 text-primary-700 rounded-full py-3 px-6 hover:bg-gray-50 transition-colors flex items-center shadow-sm"
@@ -230,7 +230,7 @@ const TakeSurvey = () => {
       
       {/* Mobile Learn Button (shown only on small screens) */}
       {currentQuestion.learn_id && (
-        <div className="md:hidden mb-6">
+        <div className="md:hidden mb-6 max-w-2xl mx-auto">
           <button
             onClick={handleShowLearn}
             className="w-full bg-white border border-gray-300 text-tertiary-700 rounded-full py-3 px-4 hover:bg-gray-50 transition-colors flex items-center justify-center shadow-sm"
@@ -242,7 +242,7 @@ const TakeSurvey = () => {
       )}
       
       {/* Start Over Button */}
-      <div className="flex justify-end mb-6">
+      <div className="flex justify-end mb-6 max-w-2xl mx-auto">
         <button
           onClick={() => resetSurvey()}
           className="text-gray-500 hover:text-gray-700 flex items-center"
@@ -253,7 +253,7 @@ const TakeSurvey = () => {
       
       {/* Bottom Bar with Previous Questions */}
       {responses.length > 0 && (
-        <div className="flex flex-col pt-4 border-t border-gray-200">
+        <div className="flex flex-col pt-4 border-t border-gray-200 max-w-2xl mx-auto">
           <h3 className="text-sm font-medium text-gray-500 mb-2">Your Progress</h3>
           <div className="flex flex-wrap gap-2">
             {responses.map((response) => {
