@@ -1,16 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
+import type { ConfigEnv, UserConfig } from 'vite';
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
   return {
     plugins: [
       react({
-        // Optimize React refresh
-        fastRefresh: true,
-        // Avoid including React in development
-        jsxRuntime: mode === 'development' ? 'automatic' : 'classic',
+        // Always use automatic JSX runtime to avoid 'React is not defined' errors
+        jsxRuntime: 'automatic',
       }),
       mode === 'analyze' && 
         visualizer({
@@ -53,7 +52,8 @@ export default defineConfig(({ mode }) => {
           },
           // Optimize asset file names for better caching
           assetFileNames: (assetInfo) => {
-            const extType = assetInfo.name.split('.').at(1);
+            if (!assetInfo.name) return `assets/[name]-[hash][extname]`;
+            
             if (/\.(png|jpe?g|gif|svg|webp)$/.test(assetInfo.name)) {
               return `assets/images/[name]-[hash][extname]`;
             }
@@ -112,7 +112,7 @@ export default defineConfig(({ mode }) => {
       ],
       exclude: ['lucide-react'],
       // Force-include some dependencies that might not be detected
-      force: ['react-quill'],
+      force: true,
       // Improve esbuild optimization
       esbuildOptions: {
         target: 'es2018',
@@ -128,7 +128,8 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       // Enable compression for preview
-      compress: true,
+      port: 4173,
+      host: true,
     },
     // Add custom Vite options
     define: {
