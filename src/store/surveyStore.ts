@@ -43,7 +43,7 @@ interface ResourcesState {
 // Create the store with the combined state
 interface SurveyState extends SurveyBaseState, SurveysState, QuestionsState, ResourcesState {}
 
-export const useSurveyStore = create<SurveyState>((set, get) => ({
+export const useSurveyStore = create<SurveyState>((set) => ({
   // Base state
   loading: false,
   error: null,
@@ -222,20 +222,41 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
+      console.log('Updating question with ID:', id, 'Updates:', updates);
+      
+      // Clean up the updates object to ensure proper handling of null values
+      const cleanUpdates = { ...updates };
+      
+      // Make sure action_trigger is null if action_id is null
+      if (cleanUpdates.action_id === null) {
+        cleanUpdates.action_trigger = null;
+      }
+      
+      // Make sure terminate_trigger is null if terminate_id is null
+      if (cleanUpdates.terminate_id === null) {
+        cleanUpdates.terminate_trigger = null;
+      }
+      
       const { error } = await supabase
         .from('questions')
-        .update(updates)
+        .update(cleanUpdates)
         .eq('id', id);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error updating question:', error);
+        throw error;
+      }
+      
+      console.log('Question updated successfully');
       
       set((state) => ({
         questions: state.questions.map((question) => 
-          question.id === id ? { ...question, ...updates } : question
+          question.id === id ? { ...question, ...cleanUpdates } : question
         ),
         loading: false
       }));
     } catch (error) {
+      console.error('Error updating question:', error);
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -336,36 +357,81 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
   
   createAction: async (content) => {
     try {
+      // Ensure content is not empty or just HTML tags
+      const strippedContent = content.replace(/<[^>]*>/g, '').trim();
+      if (!strippedContent) {
+        console.warn('Action content is empty after stripping HTML');
+        throw new Error('Action content cannot be empty');
+      }
+      
       const { data, error } = await supabase
         .from('actions')
         .insert({ content })
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error creating action:', error);
+        throw error;
+      }
       
+      if (!data) {
+        console.error('No data returned from action creation');
+        throw new Error('Failed to create action: No data returned');
+      }
+      
+      // Update the local state with the new action
       set((state) => ({ actions: [...state.actions, data] }));
+      console.log('Created action in database:', data);
       
       return data;
     } catch (error) {
+      console.error('Error creating action:', error);
       throw error;
     }
   },
   
   createTerminate: async (content) => {
     try {
+      // Ensure content is not empty or just HTML tags
+      const strippedContent = content.replace(/<[^>]*>/g, '').trim();
+      if (!strippedContent) {
+        console.warn('Terminate content is empty after stripping HTML');
+        throw new Error('Terminate content cannot be empty');
+      }
+      
+      console.log('Creating terminate with content:', content);
+      
       const { data, error } = await supabase
         .from('terminates')
         .insert({ content })
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error creating terminate:', error);
+        throw error;
+      }
       
-      set((state) => ({ terminates: [...state.terminates, data] }));
+      if (!data) {
+        console.error('No data returned from terminate creation');
+        throw new Error('Failed to create terminate: No data returned');
+      }
+      
+      // Update the local state with the new terminate
+      set((state) => {
+        const newState = { terminates: [...state.terminates, data] };
+        console.log('Updated terminates state:', newState.terminates);
+        return newState;
+      });
+      console.log('Created terminate in database:', data);
       
       return data;
     } catch (error) {
+      console.error('Error creating terminate:', error);
+      if (error instanceof Error) {
+        console.error('Error details:', error.message);
+      }
       throw error;
     }
   },

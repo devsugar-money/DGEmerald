@@ -5,6 +5,13 @@ import { Plus, AlertCircle, ChevronDown, ArrowUpDown, CheckCircle, Trash2, FileT
 import Modal from './Modal';
 import Notepad from './Notepad';
 
+// Declare the global window property for storing terminate content
+declare global {
+  interface Window {
+    _lastTerminateContent?: string;
+  }
+}
+
 // Lazy load RichTextEditor which brings in React-Quill
 const RichTextEditor = lazy(() => import('./RichTextEditor'));
 
@@ -58,6 +65,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
     action_content?: string;
     action_trigger?: string | null;
     terminate_content?: string;
+    terminate_trigger?: string | null;
   }>>({});
   
   // Initialize rows from questions
@@ -75,7 +83,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           learn_id: question.learn_id,
           action_id: question.action_id,
           action_trigger: question.action_trigger,
-          terminate_id: question.terminate_id
+          terminate_id: question.terminate_id,
+          terminate_trigger: question.terminate_trigger
         }));
       setRows(formattedRows);
     }
@@ -256,39 +265,134 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
       }
     }
     
+    // For action_content and terminate_content, get the content from resourceEdits if available
+    let modalContent = content;
+    if ((field === 'action_content' || field === 'terminate_content') && resourceEdits[rowId]) {
+      modalContent = resourceEdits[rowId][field] || content;
+      console.log(`Using ${field} from resourceEdits:`, modalContent);
+    }
+    
     setCurrentRowId(rowId);
     setCurrentCellField(field);
-    setCurrentCellContent(content);
+    setCurrentCellContent(modalContent);
     setShowCellModal(true);
   };
 
   // Function to save cell content and close modal
   const handleSaveAndCloseModal = () => {
-    // Update the content in state
-    if (currentCellField === 'text') {
-      handleCellChange(currentRowId, 'text', currentCellContent);
-    } else {
-      handleResourceChange(currentRowId, currentCellField, currentCellContent);
+    try {
+      // Update the content in state
+      if (currentCellField === 'text') {
+        handleCellChange(currentRowId, 'text', currentCellContent);
+      } else {
+        // Make sure we're setting the content correctly
+        console.log('Saving cell content:', currentCellField, currentCellContent);
+        
+        // Handle action and terminate content specially
+        if (currentCellField === 'action_content') {
+          // Force a state update with the current content
+          const updatedContent = currentCellContent;
+          console.log('Saving action_content:', updatedContent);
+          
+          // Directly update the resourceEdits state to ensure it's updated immediately
+          setResourceEdits(prevEdits => {
+            const newEdits = {
+              ...prevEdits,
+              [currentRowId]: {
+                ...(prevEdits[currentRowId] || {}),
+                action_content: updatedContent,
+                action_trigger: prevEdits[currentRowId]?.action_trigger || ''
+              }
+            };
+            console.log('New resourceEdits state for action:', newEdits[currentRowId]);
+            return newEdits;
+          });
+        } else if (currentCellField === 'terminate_content') {
+          // Force a state update with the current content
+          const updatedContent = currentCellContent;
+          console.log('Saving terminate_content:', updatedContent);
+          
+          // Directly update the resourceEdits state to ensure it's updated immediately
+          setResourceEdits(prevEdits => {
+            const newEdits = {
+              ...prevEdits,
+              [currentRowId]: {
+                ...(prevEdits[currentRowId] || {}),
+                terminate_content: updatedContent,
+                terminate_trigger: prevEdits[currentRowId]?.terminate_trigger || ''
+              }
+            };
+            console.log('New resourceEdits state for terminate:', newEdits[currentRowId]);
+            return newEdits;
+          });
+          
+          // For terminate content, we'll also save it directly to a ref to ensure it's available during save
+          window._lastTerminateContent = updatedContent;
+          console.log('Saved terminate content to window ref:', window._lastTerminateContent);
+        } else {
+          // For other fields, just update normally
+          handleResourceChange(currentRowId, currentCellField, currentCellContent);
+        }
+        
+        // Mark this row as having changes
+        setHasChanges(prev => ({...prev, [currentRowId]: true}));
+      }
+      
+      // Store the current values before closing the modal
+      const fieldToSave = currentCellField;
+      const contentToSave = currentCellContent;
+      const rowIdToSave = currentRowId;
+      
+      // Close the modal
+      setShowCellModal(false);
+      
+      // Then immediately save to database with the stored values
+      setTimeout(() => {
+        console.log(`Saving ${fieldToSave} with content:`, contentToSave);
+        // Double-check the resourceEdits state before saving
+        console.log('Current resourceEdits before save:', resourceEdits[rowIdToSave]);
+        handleSaveRow(rowIdToSave);
+      }, 300); // Increased delay to ensure state updates have propagated
+    } catch (error) {
+      console.error('Error saving cell content:', error);
     }
-    
-    // Close the modal
-    setShowCellModal(false);
-    
-    // Then immediately save to database
-    handleSaveRow(currentRowId);
   };
 
   // Initialize resource edits when a row enters edit mode
   const initializeResourceEditsForRow = (row: any) => {
+    console.log('Initializing resource edits for row:', row.id);
+    
+    // Get the action and terminate content directly from the actions and terminates arrays
+    const actionContent = row.action_id ? actions.find(a => a.id === row.action_id)?.content || "" : "";
+    const terminateContent = row.terminate_id ? terminates.find(t => t.id === row.terminate_id)?.content || "" : "";
+    
+    // Log the action and terminate data for debugging
+    console.log('Action data:', { 
+      id: row.action_id, 
+      content: actionContent, 
+      trigger: row.action_trigger,
+      found: row.action_id ? actions.some(a => a.id === row.action_id) : false
+    });
+    
+    console.log('Terminate data:', { 
+      id: row.terminate_id, 
+      content: terminateContent, 
+      trigger: row.terminate_trigger,
+      found: row.terminate_id ? terminates.some(t => t.id === row.terminate_id) : false
+    });
+    
     const edits = {
       hint_title: getResourceTitle('hint', row.hint_id),
       hint_content: getResourceContent('hint', row.hint_id),
       learn_title: getResourceTitle('learn', row.learn_id),
       learn_content: getResourceContent('learn', row.learn_id),
-      action_content: getResourceTitle('action', row.action_id),
-      action_trigger: row.action_trigger,
-      terminate_content: getResourceTitle('terminate', row.terminate_id)
+      action_content: actionContent,
+      action_trigger: row.action_trigger || "", // Ensure we have a string, not null
+      terminate_content: terminateContent,
+      terminate_trigger: row.terminate_trigger || "" // Ensure we have a string, not null
     };
+    
+    console.log('Setting resource edits for row:', row.id, edits);
     
     setResourceEdits({
       ...resourceEdits,
@@ -299,14 +403,18 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   // Handle resource field changes
   const handleResourceChange = (rowId: string, field: string, value: string | null) => {
     // Update the resourceEdits state
-    setResourceEdits({
-      ...resourceEdits,
-      [rowId]: {
-        ...resourceEdits[rowId],
-        [field]: value
-      }
+    setResourceEdits(prevEdits => {
+      const newEdits = {
+        ...prevEdits,
+        [rowId]: {
+          ...(prevEdits[rowId] || {}),
+          [field]: value
+        }
+      };
+      console.log(`Updated ${field} in resourceEdits for row ${rowId}:`, value);
+      return newEdits;
     });
-    setHasChanges({...hasChanges, [rowId]: true});
+    setHasChanges(prev => ({...prev, [rowId]: true}));
   };
   
   const handleSaveRow = async (id: string) => {
@@ -318,6 +426,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
       let updatedRow = { ...row };
       
       if (resourceEdits[id]) {
+        console.log('Resource edits for row:', id, resourceEdits[id]);
+        
         // Handle hint
         if (resourceEdits[id].hint_title && resourceEdits[id].hint_content) {
           if (row.hint_id) {
@@ -358,35 +468,110 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           }
         }
         
-        // Handle action
-        if (resourceEdits[id].action_content) {
-          if (row.action_id) {
-            // Update existing action logic would go here
-            // For now, create a new one as a workaround
-            const action = await createAction(resourceEdits[id].action_content || "");
-            updatedRow.action_id = action.id;
-          } else {
+        // Make a local copy of the resource edits to prevent any state issues
+        const rowResourceEdits = {...(resourceEdits[id] || {})};
+        
+        // Handle action - check if action_content exists and is not empty HTML
+        const actionContent = rowResourceEdits.action_content || "";
+        // More thorough check for empty HTML content from rich text editor
+        const stripActionHtml = actionContent.replace(/<[^>]*>/g, '').trim();
+        const hasActionContent = stripActionHtml !== "";
+        
+        console.log('Action content check:', {
+          rowId: id,
+          content: actionContent,
+          strippedContent: stripActionHtml,
+          hasContent: hasActionContent,
+          resourceEdits: rowResourceEdits
+        });
+        
+        if (hasActionContent) {
+          try {
             // Create new action
-            const action = await createAction(resourceEdits[id].action_content || "");
-            updatedRow.action_id = action.id;
+            const action = await createAction(actionContent);
+            if (action && action.id) {
+              console.log('Action created successfully:', action);
+              updatedRow.action_id = action.id;
+              
+              // Set action_trigger (default to empty string if undefined)
+              updatedRow.action_trigger = resourceEdits[id].action_trigger || "";
+              console.log('Created action with ID:', action.id, 'and trigger:', updatedRow.action_trigger);
+            } else {
+              console.error('Failed to create action: Invalid response', action);
+            }
+          } catch (error) {
+            console.error('Error creating action:', error);
+            // Don't clear fields on error, keep the content for retry
           }
-          
-          // Set action_trigger
-          updatedRow.action_trigger = resourceEdits[id].action_trigger;
+        } else {
+          // Clear action fields if content is removed
+          updatedRow.action_id = null;
+          updatedRow.action_trigger = null;
+          console.log('Cleared action fields - content was empty');
         }
         
-        // Handle terminate
-        if (resourceEdits[id].terminate_content) {
-          if (row.terminate_id) {
-            // Update existing terminate logic would go here
-            // For now, create a new one as a workaround
-            const terminate = await createTerminate(resourceEdits[id].terminate_content || "");
-            updatedRow.terminate_id = terminate.id;
-          } else {
+        // Handle terminate - check if terminate_content exists and is not empty HTML
+        // First check if we have content in the window ref (for terminate content specifically)
+        let terminateContent = rowResourceEdits.terminate_content || "";
+        if (window._lastTerminateContent && id === currentRowId) {
+          console.log('Using terminate content from window ref:', window._lastTerminateContent);
+          terminateContent = window._lastTerminateContent;
+          // Clear the ref after using it
+          window._lastTerminateContent = undefined;
+        }
+        
+        // More thorough check for empty HTML content from rich text editor
+        const stripTerminateHtml = terminateContent.replace(/<[^>]*>/g, '').trim();
+        const hasTerminateContent = stripTerminateHtml !== "";
+        
+        console.log('Terminate content check:', {
+          rowId: id,
+          content: terminateContent,
+          strippedContent: stripTerminateHtml,
+          hasContent: hasTerminateContent,
+          resourceEdits: rowResourceEdits
+        });
+        
+        if (hasTerminateContent) {
+          try {
+            console.log('Creating terminate with content:', terminateContent);
             // Create new terminate
-            const terminate = await createTerminate(resourceEdits[id].terminate_content || "");
-            updatedRow.terminate_id = terminate.id;
+            const terminate = await createTerminate(terminateContent);
+            console.log('Terminate creation response:', terminate);
+            
+            if (terminate && terminate.id) {
+              updatedRow.terminate_id = terminate.id;
+              
+              // Set terminate_trigger (default to empty string if undefined)
+              updatedRow.terminate_trigger = resourceEdits[id].terminate_trigger || "";
+              console.log('Created terminate with ID:', terminate.id, 'and trigger:', updatedRow.terminate_trigger);
+              
+              // Verify the terminate was created by checking if it exists in the terminates array
+              setTimeout(() => {
+                const { terminates } = useSurveyStore.getState();
+                const terminateExists = terminates.some((t: { id: string }) => t.id === terminate.id);
+                console.log(`Verification: Terminate ${terminate.id} exists in store:`, terminateExists);
+                if (!terminateExists) {
+                  console.warn('Terminate was not found in store after creation, may need to refresh');
+                }
+              }, 500);
+            } else {
+              console.error('Failed to create terminate: Invalid response', terminate);
+              // Don't clear fields on error, keep the content for retry
+            }
+          } catch (error) {
+            console.error('Error creating terminate:', error);
+            // Safely access error message if available
+            if (error instanceof Error) {
+              console.error('Error details:', error.message);
+            }
+            // Don't clear fields on error, keep the content for retry
           }
+        } else {
+          // Clear terminate fields if content is removed
+          updatedRow.terminate_id = null;
+          updatedRow.terminate_trigger = null;
+          console.log('Cleared terminate fields');
         }
       }
       
@@ -399,7 +584,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
         learn_id: updatedRow.learn_id || null,
         action_id: updatedRow.action_id || null,
         action_trigger: updatedRow.action_trigger || null,
-        terminate_id: updatedRow.terminate_id || null
+        terminate_id: updatedRow.terminate_id || null,
+        terminate_trigger: updatedRow.terminate_trigger || null
       });
       
       // Update rows to reflect new resource IDs
@@ -483,6 +669,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   };
   
   // Helper function to get resource title by id
+
   const getResourceTitle = (type: 'hint' | 'learn' | 'action' | 'terminate', id: string | null) => {
     if (!id) return "";
     
@@ -490,19 +677,52 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
     switch(type) {
       case 'hint':
         resource = hints.find(h => h.id === id);
-        return resource ? resource.title : "";
+        if (!resource) {
+          console.warn(`Hint with ID ${id} not found`);
+          return "";
+        }
+        return resource.title || "";
+        
       case 'learn':
         resource = learns.find(l => l.id === id);
-        return resource ? resource.title : "";
+        if (!resource) {
+          console.warn(`Learn with ID ${id} not found`);
+          return "";
+        }
+        return resource.title || "";
+        
       case 'action':
         resource = actions.find(a => a.id === id);
-        return resource ? resource.content.substring(0, 30) + (resource.content.length > 30 ? "..." : "") : "";
+        if (!resource) {
+          console.warn(`Action with ID ${id} not found`);
+          return "";
+        }
+        // For actions, return a truncated version of the content for display
+        return truncateText(resource.content || "", 50);
+        
       case 'terminate':
         resource = terminates.find(t => t.id === id);
-        return resource ? resource.content.substring(0, 30) + (resource.content.length > 30 ? "..." : "") : "";
+        if (!resource) {
+          console.warn(`Terminate with ID ${id} not found`);
+          return "";
+        }
+        // For terminates, return a truncated version of the content for display
+        return truncateText(resource.content || "", 50);
+        
+      default:
+        return "";
     }
   };
   
+  // Helper function to truncate text for display
+  const truncateText = (text: string, maxLength: number): string => {
+    if (!text) return "";
+    // Remove HTML tags for length calculation
+    const plainText = text.replace(/<[^>]*>/g, '');
+    if (plainText.length <= maxLength) return text;
+    return plainText.substring(0, maxLength) + '...';
+  };
+
   // Helper function to get resource content by id
   const getResourceContent = (type: 'hint' | 'learn', id: string | null) => {
     if (!id) return "";
@@ -511,10 +731,20 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
     switch(type) {
       case 'hint':
         resource = hints.find(h => h.id === id);
-        return resource ? resource.content : "";
+        if (!resource) {
+          console.warn(`Hint with ID ${id} not found`);
+          return "";
+        }
+        return resource.content || "";
       case 'learn':
         resource = learns.find(l => l.id === id);
-        return resource ? resource.content : "";
+        if (!resource) {
+          console.warn(`Learn with ID ${id} not found`);
+          return "";
+        }
+        return resource.content || "";
+      default:
+        return "";
     }
   };
 
@@ -893,29 +1123,39 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                             <div className="p-1">
                               <div 
                                 className="w-full text-left bg-white p-2 border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
-                                onClick={() => openCellModal(row.id, 'action_content', resourceEdits[row.id]?.action_content || '')}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openCellModal(row.id, 'action_content', resourceEdits[row.id]?.action_content || '');
+                                }}
                               >
                                 {renderCellContent(resourceEdits[row.id]?.action_content || '') || <span className="text-gray-400">Click to edit...</span>}
                               </div>
-                              <div className="mt-2">
+                              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                                 <label className="block text-xs font-medium text-gray-700 mb-1">
                                   Trigger action on:
                                 </label>
                                 <select
                                   value={resourceEdits[row.id]?.action_trigger || ''}
                                   onChange={(e) => handleResourceChange(row.id, 'action_trigger', e.target.value || null)}
+                                  onClick={(e) => e.stopPropagation()}
                                   className="w-full border rounded-md p-1 text-sm"
                                 >
-                                  <option value="">No trigger (always include in action plan)</option>
-                                  <option value="yes">"Yes" answer</option>
-                                  <option value="no">"No" answer</option>
+                                  <option value="" onClick={(e) => e.stopPropagation()}>No trigger (always include in action plan)</option>
+                                  <option value="yes" onClick={(e) => e.stopPropagation()}>"Yes" answer</option>
+                                  <option value="no" onClick={(e) => e.stopPropagation()}>"No" answer</option>
                                 </select>
                               </div>
                             </div>
                           ) : (
                             <div 
                               className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => openCellModal(row.id, 'action_content', getResourceTitle('action', row.action_id))}
+                              onClick={() => {
+                                // Get the full action content directly from the actions array
+                                const actionContent = row.action_id 
+                                  ? actions.find(a => a.id === row.action_id)?.content || "" 
+                                  : "";
+                                openCellModal(row.id, 'action_content', actionContent);
+                              }}
                             >
                               {renderCellContent(getResourceTitle('action', row.action_id))}
                               {row.action_id && row.action_trigger && (
@@ -932,18 +1172,47 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                           {isEditing[row.id] ? (
                             <div className="p-1">
                               <div 
-                                className="w-full text-left bg-white p-2 border border-blue-300 rounded hover:bg-blue-50 cursor-pointer"
-                                onClick={() => openCellModal(row.id, 'terminate_content', resourceEdits[row.id]?.terminate_content || '')}
+                                className="w-full text-left bg-white p-2 border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openCellModal(row.id, 'terminate_content', resourceEdits[row.id]?.terminate_content || '');
+                                }}
                               >
                                 {renderCellContent(resourceEdits[row.id]?.terminate_content || '') || <span className="text-gray-400">Click to edit...</span>}
+                              </div>
+                              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  Trigger terminate on:
+                                </label>
+                                <select
+                                  value={resourceEdits[row.id]?.terminate_trigger || ''}
+                                  onChange={(e) => handleResourceChange(row.id, 'terminate_trigger', e.target.value || null)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full border rounded-md p-1 text-sm"
+                                >
+                                  <option value="" onClick={(e) => e.stopPropagation()}>No trigger (never terminate)</option>
+                                  <option value="yes" onClick={(e) => e.stopPropagation()}>"Yes" answer</option>
+                                  <option value="no" onClick={(e) => e.stopPropagation()}>"No" answer</option>
+                                </select>
                               </div>
                             </div>
                           ) : (
                             <div 
                               className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => openCellModal(row.id, 'terminate_content', getResourceTitle('terminate', row.terminate_id))}
+                              onClick={() => {
+                                // Get the full terminate content directly from the terminates array
+                                const terminateContent = row.terminate_id 
+                                  ? terminates.find(t => t.id === row.terminate_id)?.content || "" 
+                                  : "";
+                                openCellModal(row.id, 'terminate_content', terminateContent);
+                              }}
                             >
                               {renderCellContent(getResourceTitle('terminate', row.terminate_id))}
+                              {row.terminate_id && row.terminate_trigger && (
+                                <div className="mt-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                                  Trigger on: {row.terminate_trigger === 'yes' ? 'Yes' : 'No'}
+                                </div>
+                              )}
                             </div>
                           )}
                         </td>
