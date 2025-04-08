@@ -1,10 +1,9 @@
-import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { Trees } from './IconProvider';
 
 const Navbar = () => {
-  const { user, signOut } = useAuthStore();
+  const { user, signOut, isAdmin } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -29,6 +28,14 @@ const Navbar = () => {
               >
                 Dashboard
               </Link>
+              {isAdmin && (
+                <Link 
+                  to="/admin/resources" 
+                  className="text-gray-600 hover:text-primary-600 transition-colors"
+                >
+                  Admin Resources
+                </Link>
+              )}
               <button
                 onClick={handleSignOut}
                 className="text-gray-600 hover:text-primary-600 transition-colors"

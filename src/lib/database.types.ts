@@ -83,6 +83,12 @@ export interface Database {
           terminate_id: string | null
           created_at: string
           action_trigger: string | null
+          terminate_trigger: string | null
+          hint_title_id: string | null
+          hint_content_id: string | null
+          learn_title_id: string | null
+          learn_content_id: string | null
+          hasupload: boolean
         }
         Insert: {
           id?: string
@@ -97,6 +103,7 @@ export interface Database {
           terminate_id?: string | null
           created_at?: string
           action_trigger?: string | null
+          terminate_trigger?: string | null
         }
         Update: {
           id?: string
@@ -111,6 +118,7 @@ export interface Database {
           terminate_id?: string | null
           created_at?: string
           action_trigger?: string | null
+          terminate_trigger?: string | null
         }
         Relationships: [
           {

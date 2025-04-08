@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import App from './App.tsx';
 import './index.css';
 import { IconProvider } from './components/IconProvider';
+import AdminRoute from './components/AdminRoute';
 
 // Loading Fallback
 const LoadingFallback = () => (
@@ -32,6 +33,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard.tsx'));
 const SurveyBuilder = lazy(() => import('./pages/SurveyBuilder.tsx'));
 const SurveyEditor = lazy(() => import('./pages/SurveyEditor.tsx'));
 const ResourceManager = lazy(() => import('./pages/ResourceManager.tsx'));
+const AdminResourceManager = lazy(() => import('./pages/AdminResourceManager.tsx'));
 
 // Define routes
 const router = createBrowserRouter([
@@ -111,9 +113,25 @@ const router = createBrowserRouter([
           </Suspense>
         ),
       },
+      {
+        path: '/admin/resources',
+        element: (
+          <Suspense fallback={<LoadingFallback />}>
+            <AdminRoute>
+              <AdminResourceManager />
+            </AdminRoute>
+          </Suspense>
+        ),
+      },
     ],
   },
-]);
+], {
+  future: {
+    // Enable v7 behavior to silence warnings
+    // For React Router 6.22.1, we need to use the supported flags
+    v7_normalizeFormMethod: true
+  }
+});
 
 // Preload critical components
 // The preloading happens in the prefetchComponent function
@@ -125,6 +143,7 @@ if (window.requestIdleCallback) {
     // Preload other components when browser is idle
     import('./pages/Dashboard.tsx').catch(() => {});
     import('./pages/SurveyBuilder.tsx').catch(() => {});
+    import('./pages/AdminResourceManager.tsx').catch(() => {});
   });
 }
 

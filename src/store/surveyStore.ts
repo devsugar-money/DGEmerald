@@ -224,41 +224,78 @@ export const useSurveyStore = create<SurveyState>((set) => ({
     try {
       console.log('Updating question with ID:', id, 'Updates:', updates);
       
+      // Convert updates to a generic record to bypass TypeScript restrictions
+      // since our auto-generated types don't include the newer fields
+      const extendedUpdates: Record<string, any> = { ...updates };
+      
+      // Check for hasupload field specifically
+      if ('hasupload' in extendedUpdates) {
+        console.log('hasupload field found:', {
+          original: extendedUpdates.hasupload,
+          type: typeof extendedUpdates.hasupload
+        });
+        // Make sure it's a proper boolean
+        extendedUpdates.hasupload = extendedUpdates.hasupload === true;
+        console.log('Normalized hasupload to:', extendedUpdates.hasupload);
+      }
+      
       // Clean up the updates object to ensure proper handling of null values
-      const cleanUpdates = { ...updates };
+      const cleanUpdates = extendedUpdates;
+    
+    // Make sure action_trigger is null if action_id is null
+    if (cleanUpdates.action_id === null) {
+      cleanUpdates.action_trigger = null;
+    }
+    
+    // Make sure terminate_trigger is null if terminate_id is null
+    if (cleanUpdates.terminate_id === null) {
+      cleanUpdates.terminate_trigger = null;
+    }
       
-      // Make sure action_trigger is null if action_id is null
-      if (cleanUpdates.action_id === null) {
-        cleanUpdates.action_trigger = null;
-      }
+      // Log the exact payload sent to Supabase
+      console.log('Sending to Supabase:', { 
+        table: 'questions',
+        id: id,
+        updates: cleanUpdates,
+        hasupload: cleanUpdates.hasupload
+      });
       
-      // Make sure terminate_trigger is null if terminate_id is null
-      if (cleanUpdates.terminate_id === null) {
-        cleanUpdates.terminate_trigger = null;
-      }
-      
-      const { error } = await supabase
+      // Use type assertion to bypass TypeScript restrictions
+      const { error, data } = await supabase
         .from('questions')
-        .update(cleanUpdates)
-        .eq('id', id);
+        .update(cleanUpdates as any)
+        .eq('id', id)
+        .select();
       
       if (error) {
-        console.error('Supabase error updating question:', error);
-        throw error;
-      }
-      
-      console.log('Question updated successfully');
-      
-      set((state) => ({
-        questions: state.questions.map((question) => 
-          question.id === id ? { ...question, ...cleanUpdates } : question
-        ),
-        loading: false
-      }));
-    } catch (error) {
-      console.error('Error updating question:', error);
-      set({ error: (error as Error).message, loading: false });
+      console.error('Supabase error updating question:', error);
+      throw error;
     }
+    
+    // Check what data was returned after update
+    console.log('Supabase update result:', { data });
+    
+    // Verify the hasupload value in the returned data
+    if (data && data.length > 0) {
+      // Cast data to any to access dynamically added fields
+      const returnedData = data[0] as any;
+      console.log('Updated question returned from DB:', {
+        id: returnedData.id,
+        hasupload: returnedData.hasupload,
+        hasuploadType: typeof returnedData.hasupload
+      });
+    }
+    
+    // Update Zustand state
+    set((state) => {
+      return {
+        questions: state.questions.map(q => q.id === id ? { ...q, ...updates } : q),
+        loading: false
+      };
+    });
+  } catch (error) {
+    set({ error: (error as Error).message, loading: false });
+  }
   },
   
   updateQuestionOrder: async (updatedQuestions) => {

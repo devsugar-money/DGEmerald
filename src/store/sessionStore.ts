@@ -2,12 +2,20 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { Survey, Question, Response, Session } from '../lib/supabase';
 
+// Extended Question type with joined tables
+interface ExtendedQuestion extends Question {
+  hint?: any;
+  learn?: any;
+  action?: any;
+  terminate?: any;
+}
+
 interface SessionState {
   activeSurvey: Survey | null;
   activeSession: Session | null;
-  questions: Question[];
+  questions: ExtendedQuestion[];
   responses: Response[];
-  currentQuestion: Question | null;
+  currentQuestion: ExtendedQuestion | null;
   progress: number;
   actionPlan: string[];
   terminateMessage: string | null;
@@ -149,25 +157,36 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           ? currentQuestion.yes_leads_to 
           : currentQuestion.no_leads_to;
         
-        // Check if there's a terminate flag
+        // Check if there's a terminate flag and if it should be triggered based on the answer
         if (currentQuestion.terminate_id) {
-          const terminateData = currentQuestion.terminate as unknown as { content: string };
+          const terminateData = currentQuestion.terminate;
           
-          // Collect all actions and complete the session
-          const actionPlan = collectActionPlan(questions, newResponses);
+          // Check if terminate should be triggered based on the answer
+          const shouldTerminate = 
+            // If terminate_trigger is not set, never terminate (default behavior)
+            !currentQuestion.terminate_trigger || 
+            // If terminate_trigger is 'yes', only terminate when answer is true
+            (currentQuestion.terminate_trigger === 'yes' && answer === true) ||
+            // If terminate_trigger is 'no', only terminate when answer is false
+            (currentQuestion.terminate_trigger === 'no' && answer === false);
           
-          await completeSessionInDb(activeSession.id);
-          
-          set({
-            responses: newResponses,
-            actionPlan,
-            terminateMessage: terminateData?.content || null,
-            currentQuestion: null,
-            progress: 100,
-            loading: false,
-          });
-          
-          return;
+          if (shouldTerminate) {
+            // Collect all actions and complete the session
+            const actionPlan = collectActionPlan(questions, newResponses);
+            
+            await completeSessionInDb(activeSession.id);
+            
+            set({
+              responses: newResponses,
+              actionPlan,
+              terminateMessage: terminateData?.content || null,
+              currentQuestion: null,
+              progress: 100,
+              loading: false,
+            });
+            
+            return;
+          }
         }
         
         // If no next question, we're done
@@ -234,7 +253,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         
         // Check if there's a terminate flag
         if (currentQuestion.terminate_id) {
-          const terminateData = currentQuestion.terminate as unknown as { content: string };
+          const terminateData = currentQuestion.terminate;
           
           // Collect all actions and complete the session
           const actionPlan = collectActionPlan(questions, [...responses, responseData]);
@@ -468,7 +487,7 @@ function collectActionPlan(questions: any[], responses: Response[]) {
   return actionItems;
 }
 
-function getQuestionIndexInPath(questions: Question[], responses: Response[], questionId: string) {
+function getQuestionIndexInPath(_questions: Question[], responses: Response[], questionId: string) {
   // Find the index of the response for this question
   return responses.findIndex(r => r.question_id === questionId);
 }
