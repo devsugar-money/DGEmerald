@@ -1,55 +1,74 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useSurveyStore } from '../store/surveyStore';
 import { Plus, AlertCircle, ChevronDown, ArrowUpDown, CheckCircle, Trash2, FileText } from '../components/IconProvider';
-// Removed DroppableArea import as we're using custom drag and drop
 import Modal from './Modal';
 import Notepad from './Notepad';
-import ResourceSelector from './ResourceSelector';
 import { ExtendedQuestion } from '../types/question';
+import ResourceSelector from './ResourceSelector'; // We'll reuse this inside a modal
 
-// Declare the global window property for storing terminate content
+// Lazy load RichTextEditor
+const RichTextEditor = lazy(() => import('./RichTextEditor'));
+const EditorLoading = () => (
+  <div className="min-h-[150px] bg-gray-50 animate-pulse rounded"></div>
+);
+
 declare global {
   interface Window {
     _lastTerminateContent?: string;
   }
 }
 
-// Lazy load RichTextEditor which brings in React-Quill
-const RichTextEditor = lazy(() => import('./RichTextEditor'));
-
-// Loading component for RichTextEditor
-const EditorLoading = () => (
-  <div className="min-h-[150px] bg-gray-50 animate-pulse rounded"></div>
-);
-
-// Define the updated question interface to include new fields
-// Use the ExtendedQuestion type directly to avoid duplication
 type QuestionType = ExtendedQuestion;
 
 interface SpreadsheetEditorProps {
   surveyId: string;
 }
 
+/**
+ * Utility: strip HTML tags and shorten for previews
+ */
+function getPlainTextPreview(html: string | null | undefined, maxLength = 40): string {
+  if (!html) return '';
+  const stripped = html.replace(/<[^>]+>/g, '');
+  return stripped.length > maxLength ? stripped.substring(0, maxLength) + '...' : stripped;
+}
+
 const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
-  const { 
-    questions, hints, learns, actions, terminates,
-    createQuestion, updateQuestion, deleteQuestion, updateQuestionOrder,
-    createHint, createLearn, createAction, createTerminate
-  } = useSurveyStore();
-  
+  const {
+    questions,
+    updateQuestion,
+    updateQuestionOrder,
+    deleteQuestion,
+    hintTitles,
+    hintContents,
+    learnTitles,
+    learnContents,
+    actions,
+    terminates,
+    createQuestion,
+  } = useSurveyStore((state) => ({
+    questions: state.questions,
+    updateQuestion: state.updateQuestion,
+    updateQuestionOrder: state.updateQuestionOrder,
+    deleteQuestion: state.deleteQuestion,
+    hintTitles: state.hintTitles,
+    hintContents: state.hintContents,
+    learnTitles: state.learnTitles,
+    learnContents: state.learnContents,
+    actions: state.actions,
+    terminates: state.terminates,
+    createQuestion: state.createQuestion,
+  }));
+
   const [rows, setRows] = useState<Array<any>>([]);
-  const [isEditing, setIsEditing] = useState<Record<string, boolean>>({});
   const [hasChanges, setHasChanges] = useState<Record<string, boolean>>({});
   const [insertIndex, setInsertIndex] = useState<number | null>(null);
   const [showInsertForm, setShowInsertForm] = useState(false);
   const [newQuestionText, setNewQuestionText] = useState('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showSavedMessage, setShowSavedMessage] = useState(false);
-  
-  // State for direct cell editing via modal
-  const [directEditCell, setDirectEditCell] = useState<{rowId: string, field: 'yes_leads_to' | 'no_leads_to'} | null>(null);
-  
-  // Cell edit mode modals
+
+  // Cell edit modals (for question text, action content, terminate content)
   const [showCellModal, setShowCellModal] = useState(false);
   const [currentCellContent, setCurrentCellContent] = useState('');
   const [currentCellField, setCurrentCellField] = useState('');
@@ -58,60 +77,101 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
-  // Notepad state
+
+  // Notepad
   const [showNotepad, setShowNotepad] = useState(false);
 
-  // Resource editing state
-  const [resourceEdits, setResourceEdits] = useState<Record<string, {
-    hint_title?: string;
-    hint_content?: string;
-    learn_title?: string;
-    learn_content?: string;
-    action_content?: string;
-    action_trigger?: string | null;
-    terminate_content?: string;
-    terminate_trigger?: string | null;
-    hint_title_id?: string | null;
-    hint_content_id?: string | null;
-    learn_title_id?: string | null;
-    learn_content_id?: string | null;
-    hasupload?: boolean;
-  }>>({});
-  
-  // Initialize rows from questions
+  // Resource Modal for hint/learn
+  type ResourceModalType = 'hints_title' | 'hints_content' | 'learn_title' | 'learn_content';
+  const [resourceModal, setResourceModal] = useState<{
+    open: boolean;
+    rowId: string;
+    resourceType: ResourceModalType;
+  } | null>(null);
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+
+  // Direct 'yes_leads_to' / 'no_leads_to' modal
+  const [directEditCell, setDirectEditCell] = useState<{
+    rowId: string;
+    field: 'yes_leads_to' | 'no_leads_to';
+  } | null>(null);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────────────────────────────────────
+  const renderCellPreview = (html: string | null | undefined) => {
+    const preview = getPlainTextPreview(html);
+    return preview ? preview : <span className="text-gray-400">(None)</span>;
+  };
+
+  // Retrieve full content from the store for action
+  const getActionContent = (row: any) => {
+    if (!row.action_id) return '';
+    const found = actions.find((a) => a.id === row.action_id);
+    return found?.content || '';
+  };
+
+  // Retrieve full content from the store for terminate
+  const getTerminateContent = (row: any) => {
+    if (!row.terminate_id) return '';
+    const found = terminates.find((t) => t.id === row.terminate_id);
+    return found?.content || '';
+  };
+
+  const getQuestionIndexById = (id: string | null | undefined) => {
+    if (!id) return '';
+    const q = questions.find((qq) => qq.id === id);
+    return q ? `${q.order_position + 1}` : '';
+  };
+
+  const getResourceTitlePreview = (type: 'hint' | 'learn', id: string | null) => {
+    if (!id) return '';
+    const arr = type === 'hint' ? hintTitles : learnTitles;
+    const resource = arr.find((r) => r.id === id);
+    if (!resource) return '';
+    return getPlainTextPreview(resource.title || '');
+  };
+
+  const getResourceContentPreview = (type: 'hint' | 'learn', id: string | null) => {
+    if (!id) return '';
+    const arr = type === 'hint' ? hintContents : learnContents;
+    const resource = arr.find((r) => r.id === id);
+    if (!resource) return '';
+    return getPlainTextPreview(resource.content || '');
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Initial load
+  // ─────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (questions.length > 0) {
       const formattedRows = questions
         .sort((a, b) => a.order_position - b.order_position)
-        .map(question => ({
+        .map((question) => ({
           id: question.id,
           text: question.text,
           order_position: question.order_position,
           yes_leads_to: question.yes_leads_to,
           no_leads_to: question.no_leads_to,
-          hint_id: question.hint_id,
-          learn_id: question.learn_id,
-          action_id: question.action_id,
-          action_trigger: question.action_trigger,
-          terminate_id: question.terminate_id,
-          terminate_trigger: question.terminate_trigger,
           hint_title_id: (question as QuestionType).hint_title_id || null,
           hint_content_id: (question as QuestionType).hint_content_id || null,
           learn_title_id: (question as QuestionType).learn_title_id || null,
           learn_content_id: (question as QuestionType).learn_content_id || null,
-          hasupload: !!(question as QuestionType).hasupload
+          action_id: question.action_id,
+          action_trigger: question.action_trigger,
+          terminate_id: question.terminate_id,
+          terminate_trigger: question.terminate_trigger,
+          hasupload: !!(question as QuestionType).hasupload,
         }));
       setRows(formattedRows);
     }
   }, [questions]);
 
-  // Auto-save every minute
+  // Auto-save every 60 seconds
   useEffect(() => {
     const autoSaveInterval = setInterval(() => {
-      const rowsWithChanges = Object.keys(hasChanges).filter(id => hasChanges[id]);
+      const rowsWithChanges = Object.keys(hasChanges).filter((id) => hasChanges[id]);
       if (rowsWithChanges.length > 0) {
-        // Save the first row with changes
         const rowToSave = rowsWithChanges[0];
         handleSaveRow(rowToSave).then(() => {
           setLastSaved(new Date());
@@ -119,683 +179,315 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           setTimeout(() => setShowSavedMessage(false), 3000);
         });
       }
-    }, 60000); // 60 seconds
+    }, 60000);
 
     return () => clearInterval(autoSaveInterval);
-  }, [hasChanges, rows, resourceEdits]);
+  }, [hasChanges]);
 
-  // Display saved message for 3 seconds
   useEffect(() => {
     if (showSavedMessage) {
-      const timer = setTimeout(() => {
-        setShowSavedMessage(false);
-      }, 3000);
+      const timer = setTimeout(() => setShowSavedMessage(false), 3000);
       return () => clearTimeout(timer);
     }
   }, [showSavedMessage]);
-  
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Row insertion
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleAddRow = async () => {
     try {
-      const newQuestion = await createQuestion(surveyId, "", rows.length);
-      setRows([...rows, {
-        id: newQuestion.id,
-        text: newQuestion.text,
-        order_position: rows.length,
-        yes_leads_to: null,
-        no_leads_to: null,
-        hint_id: null,
-        learn_id: null,
-        action_id: null,
-        action_trigger: null,
-        terminate_id: null,
-        hint_title_id: null,
-        hint_content_id: null,
-        learn_title_id: null,
-        learn_content_id: null,
-        hasupload: false
-      }]);
-      
-      // Scroll to the bottom of the page
+      const newQ = await createQuestion(surveyId, '', rows.length);
+      setRows([
+        ...rows,
+        {
+          id: newQ.id,
+          text: newQ.text,
+          order_position: rows.length,
+          yes_leads_to: null,
+          no_leads_to: null,
+          hint_title_id: null,
+          hint_content_id: null,
+          learn_title_id: null,
+          learn_content_id: null,
+          action_id: null,
+          action_trigger: null,
+          terminate_id: null,
+          terminate_trigger: null,
+          hasupload: false,
+        },
+      ]);
       window.scrollTo(0, document.body.scrollHeight);
     } catch (error) {
-      console.error("Error adding new row:", error);
+      console.error('Error adding new row:', error);
     }
   };
 
   const handleInsertQuestion = async (index: number) => {
     try {
       if (!newQuestionText.trim()) {
-        alert("Please enter question text");
+        alert('Please enter question text');
         return;
       }
-      
-      // If inserting at the end, adjust the index
       const isInsertingAtEnd = index === rows.length;
-      
-      // Create new question with appropriate order position
-      const newQuestion = await createQuestion(
-        surveyId,
-        newQuestionText,
-        isInsertingAtEnd ? rows.length : index
-      );
-      
-      // Adjust order of all questions
+      const newQ = await createQuestion(surveyId, newQuestionText, isInsertingAtEnd ? rows.length : index);
+
       const updatedRows = [...rows];
-      
-      // Insert new question at the specified index
+      const newRowData = {
+        id: newQ.id,
+        text: newQ.text,
+        order_position: index,
+        yes_leads_to: null,
+        no_leads_to: null,
+        hint_title_id: null,
+        hint_content_id: null,
+        learn_title_id: null,
+        learn_content_id: null,
+        action_id: null,
+        action_trigger: null,
+        terminate_id: null,
+        terminate_trigger: null,
+        hasupload: false,
+      };
+
       if (isInsertingAtEnd) {
-        // If inserting at end, add to the end of the array
-        updatedRows.push({
-          id: newQuestion.id,
-          text: newQuestion.text,
-          order_position: rows.length,
-          yes_leads_to: null,
-          no_leads_to: null,
-          hint_id: null,
-          learn_id: null,
-          action_id: null,
-          action_trigger: null,
-          terminate_id: null
-        });
+        updatedRows.push({ ...newRowData, order_position: rows.length });
       } else {
-        // Otherwise insert at the specified index
-        updatedRows.splice(index, 0, {
-          id: newQuestion.id,
-          text: newQuestion.text,
-          order_position: index,
-          yes_leads_to: null,
-          no_leads_to: null,
-          hint_id: null,
-          learn_id: null,
-          action_id: null,
-          action_trigger: null,
-          terminate_id: null
-        });
+        updatedRows.splice(index, 0, newRowData);
       }
-      
-      // Update order positions
-      const questionsWithUpdatedOrder = updatedRows.map((question, idx) => ({
-        id: question.id,
-        order_position: idx
+
+      // Re-order positions
+      const questionsWithOrder = updatedRows.map((q, i) => ({
+        id: q.id,
+        order_position: i,
       }));
-      
-      // Set the updated rows first
       setRows(updatedRows);
-      
-      // Update the order in the database
-      await updateQuestionOrder(questionsWithUpdatedOrder);
-      
-      // Reset insert form state
+      await updateQuestionOrder(questionsWithOrder);
+
       setNewQuestionText('');
       setShowInsertForm(false);
       setInsertIndex(null);
-      
-      // If inserting at end, scroll to the bottom
+
       if (isInsertingAtEnd) {
         window.scrollTo(0, document.body.scrollHeight);
       }
     } catch (error) {
-      console.error("Error inserting question:", error);
+      console.error('Error inserting question:', error);
     }
   };
-  
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Cell changes
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleCellChange = (id: string, field: string, value: any) => {
-    setRows(rows.map(row => 
-      row.id === id ? { ...row, [field]: value } : row
-    ));
-    setHasChanges({...hasChanges, [id]: true});
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          return { ...r, [field]: value };
+        }
+        return r;
+      })
+    );
+    setHasChanges((prev) => ({ ...prev, [id]: true }));
   };
 
-  // Handle delete question
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Delete row
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleDeleteRow = async (id: string) => {
     try {
-      // Call the deleteQuestion function from the store
       await deleteQuestion(id);
-      
-      // Update the rows state by removing the deleted row
-      setRows(rows.filter(row => row.id !== id));
-      
-      // Clean up any editing state for this row
-      const newIsEditing = { ...isEditing };
-      delete newIsEditing[id];
-      setIsEditing(newIsEditing);
-      
-      const newHasChanges = { ...hasChanges };
-      delete newHasChanges[id];
-      setHasChanges(newHasChanges);
-      
-      const newResourceEdits = { ...resourceEdits };
-      delete newResourceEdits[id];
-      setResourceEdits(newResourceEdits);
+      setRows((prev) => prev.filter((r) => r.id !== id));
 
       setShowDeleteConfirm(false);
       setDeleteConfirmId(null);
+
+      setHasChanges((prev) => {
+        const newObj = { ...prev };
+        delete newObj[id];
+        return newObj;
+      });
     } catch (error) {
-      console.error("Error deleting row:", error);
+      console.error('Error deleting row:', error);
     }
   };
 
-  // Open the cell editing modal
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Rich-text cell modal (question text, action_content, terminate_content)
+  // ─────────────────────────────────────────────────────────────────────────────
   const openCellModal = (rowId: string, field: string, content: string) => {
-    // If not in edit mode, initialize resource edits for this row
-    if (!isEditing[rowId]) {
-      const row = rows.find(r => r.id === rowId);
-      if (row) {
-        initializeResourceEditsForRow(row);
-        setIsEditing({...isEditing, [rowId]: true});
-      }
-    }
-    
-    // For action_content and terminate_content, get the content from resourceEdits if available
-    let modalContent = content;
-    if ((field === 'action_content' || field === 'terminate_content') && resourceEdits[rowId]) {
-      modalContent = resourceEdits[rowId][field] || content;
-      // console.log(`Using ${field} from resourceEdits:`, modalContent);
-    }
-    
     setCurrentRowId(rowId);
     setCurrentCellField(field);
-    setCurrentCellContent(modalContent);
+    setCurrentCellContent(content);
     setShowCellModal(true);
   };
 
-  // Function to save cell content and close modal
-  const handleSaveAndCloseModal = () => {
+  const handleSaveAndCloseModal = async () => {
     try {
-      // Update the content in state
-      if (currentCellField === 'text') {
-        handleCellChange(currentRowId, 'text', currentCellContent);
-      } else {
-        // Make sure we're setting the content correctly
-        // console.log('Saving cell content:', currentCellField, currentCellContent);
-        
-        // Handle action and terminate content specially
-        if (currentCellField === 'action_content') {
-          // Force a state update with the current content
-          const updatedContent = currentCellContent;
-          // console.log('Saving action_content:', updatedContent);
-          
-          // Directly update the resourceEdits state to ensure it's updated immediately
-          setResourceEdits(prevEdits => {
-            const newEdits = {
-              ...prevEdits,
-              [currentRowId]: {
-                ...(prevEdits[currentRowId] || {}),
-                action_content: updatedContent,
-                action_trigger: prevEdits[currentRowId]?.action_trigger || ''
-              }
-            };
-            // console.log('New resourceEdits state for action:', newEdits[currentRowId]);
-            return newEdits;
-          });
-        } else if (currentCellField === 'terminate_content') {
-          // Force a state update with the current content
-          const updatedContent = currentCellContent;
-          // console.log('Saving terminate_content:', updatedContent);
-          
-          // Directly update the resourceEdits state to ensure it's updated immediately
-          setResourceEdits(prevEdits => {
-            const newEdits = {
-              ...prevEdits,
-              [currentRowId]: {
-                ...(prevEdits[currentRowId] || {}),
-                terminate_content: updatedContent,
-                terminate_trigger: prevEdits[currentRowId]?.terminate_trigger || ''
-              }
-            };
-            // console.log('New resourceEdits state for terminate:', newEdits[currentRowId]);
-            return newEdits;
-          });
-          
-          // For terminate content, we'll also save it directly to a ref to ensure it's available during save
-          window._lastTerminateContent = updatedContent;
-          // console.log('Saved terminate content to window ref:', window._lastTerminateContent);
-        } else {
-          // For other fields, just update normally
-          handleResourceChange(currentRowId, currentCellField, currentCellContent);
-        }
-        
-        // Mark this row as having changes
-        setHasChanges(prev => ({...prev, [currentRowId]: true}));
-      }
-      
-      // Store the current values before closing the modal
-      const fieldToSave = currentCellField;
-      const contentToSave = currentCellContent;
       const rowIdToSave = currentRowId;
-      
+      if (!rowIdToSave || !currentCellField) return;
+
       // Close the modal
       setShowCellModal(false);
-      
-      // Then immediately save to database with the stored values
-      setTimeout(() => {
-        // console.log(`Saving ${fieldToSave} with content:`, contentToSave);
-        // Double-check the resourceEdits state before saving
-        // console.log('Current resourceEdits before save:', resourceEdits[rowIdToSave]);
-        handleSaveRow(rowIdToSave);
-      }, 300); // Increased delay to ensure state updates have propagated
+      setCurrentRowId('');
+      setCurrentCellField('');
+      setCurrentCellContent('');
+
+      // Update the DB immediately for question text, action_content, or terminate_content
+      await updateQuestion(rowIdToSave, { [currentCellField]: currentCellContent });
+      setHasChanges((prev) => ({ ...prev, [rowIdToSave]: false }));
+      setLastSaved(new Date());
+      setShowSavedMessage(true);
     } catch (error) {
       console.error('Error saving cell content:', error);
     }
   };
 
-  // Initialize resource edits when a row enters edit mode
-  const initializeResourceEditsForRow = (row: any) => {
-    // console.log('Initializing resource edits for row:', row.id);
-    
-    // Get the action and terminate content directly from the actions and terminates arrays
-    const actionContent = row.action_id ? actions.find(a => a.id === row.action_id)?.content || "" : "";
-    const terminateContent = row.terminate_id ? terminates.find(t => t.id === row.terminate_id)?.content || "" : "";
-    
-    // Create the edits object for this row
-    const edits = {
-      hint_title: getResourceTitle('hint', row.hint_id),
-      hint_content: getResourceContent('hint', row.hint_id),
-      learn_title: getResourceTitle('learn', row.learn_id),
-      learn_content: getResourceContent('learn', row.learn_id),
-      action_content: actionContent,
-      action_trigger: row.action_trigger,
-      terminate_content: terminateContent,
-      terminate_trigger: row.terminate_trigger,
-      hint_title_id: row.hint_title_id || null,
-      hint_content_id: row.hint_content_id || null,
-      learn_title_id: row.learn_title_id || null,
-      learn_content_id: row.learn_content_id || null,
-      hasupload: !!row.hasupload
-    };
-
-    // Set the resource edits for this row
-    setResourceEdits({
-      ...resourceEdits,
-      [row.id]: edits
-    });
-    
-    // console.log('Set resource edits for row:', row.id, edits);
-  };
-  
-  // Handle resource field changes
-  const handleResourceChange = (rowId: string, field: string, value: string | null | boolean) => {
-    // Update the resourceEdits state
-    setResourceEdits(prevEdits => {
-      const newEdits = {
-        ...prevEdits,
-        [rowId]: {
-          ...(prevEdits[rowId] || {}),
-          [field]: value
-        }
-      };
-      // console.log(`Updated ${field} in resourceEdits for row ${rowId}:`, value);
-      return newEdits;
-    });
-    setHasChanges(prev => ({...prev, [rowId]: true}));
-  };
-  
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Yes/No leads to
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleSaveRow = async (id: string) => {
-    const row = rows.find(r => r.id === id);
+    const row = rows.find((r) => r.id === id);
     if (!row) return;
-    
+
     try {
-      // First, handle resources
-      let updatedRow = { ...row };
-      
-      if (resourceEdits[id]) {
-        // console.log('Resource edits for row:', id, resourceEdits[id]);
-        
-        // Handle hint
-        if (resourceEdits[id].hint_title && resourceEdits[id].hint_content) {
-          if (row.hint_id) {
-            // Update existing hint logic would go here
-            // For now, create a new one as a workaround
-            const hint = await createHint(
-              resourceEdits[id].hint_title || "", 
-              resourceEdits[id].hint_content || ""
-            );
-            updatedRow.hint_id = hint.id;
-          } else {
-            // Create new hint
-            const hint = await createHint(
-              resourceEdits[id].hint_title || "", 
-              resourceEdits[id].hint_content || ""
-            );
-            updatedRow.hint_id = hint.id;
-          }
-        }
-        
-        // Handle learn
-        if (resourceEdits[id].learn_title && resourceEdits[id].learn_content) {
-          if (row.learn_id) {
-            // Update existing learn logic would go here
-            // For now, create a new one as a workaround
-            const learn = await createLearn(
-              resourceEdits[id].learn_title || "", 
-              resourceEdits[id].learn_content || ""
-            );
-            updatedRow.learn_id = learn.id;
-          } else {
-            // Create new learn
-            const learn = await createLearn(
-              resourceEdits[id].learn_title || "", 
-              resourceEdits[id].learn_content || ""
-            );
-            updatedRow.learn_id = learn.id;
-          }
-        }
-        
-        // Make a local copy of the resource edits to prevent any state issues
-        const rowResourceEdits = {...(resourceEdits[id] || {})};
-        
-        // Handle action - check if action_content exists and is not empty HTML
-        const actionContent = rowResourceEdits.action_content || "";
-        // More thorough check for empty HTML content from rich text editor
-        const stripActionHtml = actionContent.replace(/<[^>]*>/g, '').trim();
-        const hasActionContent = stripActionHtml !== "";
-        
-        const actionContentCheck = {
-          rowId: id,
-          content: actionContent,
-          strippedContent: stripActionHtml,
-          hasContent: hasActionContent,
-          resourceEdits: rowResourceEdits
-        };
-        
-        if (hasActionContent) {
-          try {
-            // Create new action
-            const action = await createAction(actionContent);
-            if (action && action.id) {
-              // console.log('Action created successfully:', action);
-              updatedRow.action_id = action.id;
-              
-              // Set action_trigger (default to empty string if undefined)
-              updatedRow.action_trigger = resourceEdits[id].action_trigger || "";
-              // console.log('Created action with ID:', action.id, 'and trigger:', updatedRow.action_trigger);
-            } else {
-              console.error('Failed to create action: Invalid response', action);
-            }
-          } catch (error) {
-            console.error('Error creating action:', error);
-            // Don't clear fields on error, keep the content for retry
-          }
-        } else {
-          // Clear action fields if content is removed
-          updatedRow.action_id = null;
-          updatedRow.action_trigger = null;
-          // console.log('Cleared action fields - content was empty');
-        }
-        
-        // Handle terminate - check if terminate_content exists and is not empty HTML
-        // First check if we have content in the window ref (for terminate content specifically)
-        let terminateContent = rowResourceEdits.terminate_content || "";
-        if (window._lastTerminateContent && id === currentRowId) {
-          // console.log('Using terminate content from window ref:', window._lastTerminateContent);
-          terminateContent = window._lastTerminateContent;
-          // Clear the ref after using it
-          window._lastTerminateContent = undefined;
-        }
-        
-        // More thorough check for empty HTML content from rich text editor
-        const stripTerminateHtml = terminateContent.replace(/<[^>]*>/g, '').trim();
-        const hasTerminateContent = stripTerminateHtml !== "";
-        
-        const terminateContentCheck = {
-          rowId: id,
-          content: terminateContent,
-          strippedContent: stripTerminateHtml,
-          hasContent: hasTerminateContent,
-          resourceEdits: rowResourceEdits
-        };
-        
-        if (hasTerminateContent) {
-          try {
-            // console.log('Creating terminate with content:', terminateContent);
-            // Create new terminate
-            const terminate = await createTerminate(terminateContent);
-            // console.log('Terminate creation response:', terminate);
-            
-            if (terminate && terminate.id) {
-              updatedRow.terminate_id = terminate.id;
-              
-              // Set terminate_trigger (default to empty string if undefined)
-              updatedRow.terminate_trigger = resourceEdits[id].terminate_trigger || "";
-              // console.log('Created terminate with ID:', terminate.id, 'and trigger:', updatedRow.terminate_trigger);
-              
-              // Verify the terminate was created by checking if it exists in the terminates array
-              setTimeout(() => {
-                const { terminates } = useSurveyStore.getState();
-                const terminateExists = terminates.some((t: { id: string }) => t.id === terminate.id);
-                // console.log(`Verification: Terminate ${terminate.id} exists in store:`, terminateExists);
-                if (!terminateExists) {
-                  console.warn('Terminate was not found in store after creation, may need to refresh');
-                }
-              }, 500);
-            } else {
-              console.error('Failed to create terminate: Invalid response', terminate);
-              // Don't clear fields on error, keep the content for retry
-            }
-          } catch (error) {
-            console.error('Error creating terminate:', error);
-            // Safely access error message if available
-            if (error instanceof Error) {
-              console.error('Error details:', error.message);
-            }
-            // Don't clear fields on error, keep the content for retry
-          }
-        } else {
-          // Clear terminate fields if content is removed
-          updatedRow.terminate_id = null;
-          updatedRow.terminate_trigger = null;
-          // console.log('Cleared terminate fields');
-        }
-      }
-      
-      // Log exact state of hasupload before sending to Supabase
-      const hasuploadDebug = {
-        'row.hasupload': row.hasupload,
-        'updatedRow.hasupload': updatedRow.hasupload,
-        'resourceEdits[id].hasupload': resourceEdits[id]?.hasupload,
-        'convertedValue': !!updatedRow.hasupload,
-        'typeof': typeof updatedRow.hasupload
+      // Prepare updates
+      const updatesPayload: Record<string, any> = {
+        text: row.text,
+        yes_leads_to: row.yes_leads_to || null,
+        no_leads_to: row.no_leads_to || null,
+        hint_title_id: row.hint_title_id || null,
+        hint_content_id: row.hint_content_id || null,
+        learn_title_id: row.learn_title_id || null,
+        learn_content_id: row.learn_content_id || null,
+        action_id: row.action_id || null,
+        action_trigger: row.action_trigger || null,
+        terminate_id: row.terminate_id || null,
+        terminate_trigger: row.terminate_trigger || null,
+        hasupload: row.hasupload || false,
       };
 
-      // Make sure updatedRow has the latest hasupload value from resourceEdits
-      if (resourceEdits[id] && resourceEdits[id].hasupload !== undefined) {
-        updatedRow.hasupload = resourceEdits[id].hasupload;
-      }
+      // If action_id or terminate_id is cleared, also clear triggers
+      if (!updatesPayload.action_id) updatesPayload.action_trigger = null;
+      if (!updatesPayload.terminate_id) updatesPayload.terminate_trigger = null;
 
-      // Now update the question with all changes
-      await updateQuestion(id, {
-        text: updatedRow.text,
-        yes_leads_to: updatedRow.yes_leads_to || null,
-        no_leads_to: updatedRow.no_leads_to || null,
-        hint_id: updatedRow.hint_id || null,
-        learn_id: updatedRow.learn_id || null,
-        action_id: updatedRow.action_id || null,
-        action_trigger: updatedRow.action_trigger || null,
-        terminate_id: updatedRow.terminate_id || null,
-        terminate_trigger: updatedRow.terminate_trigger || null,
-        hint_title_id: updatedRow.hint_title_id || null,
-        hint_content_id: updatedRow.hint_content_id || null,
-        learn_title_id: updatedRow.learn_title_id || null,
-        learn_content_id: updatedRow.learn_content_id || null,
-        hasupload: !!updatedRow.hasupload
-      });
-      
-      // Update rows to reflect new resource IDs
-      setRows(rows.map(r => r.id === id ? updatedRow : r));
-      
-      // Clear the hasChanges flag and exit edit mode when save is pressed
-      setHasChanges({...hasChanges, [id]: false});
-      setIsEditing({...isEditing, [id]: false});
-      
-      // Update last saved time
+      await updateQuestion(id, updatesPayload);
+
+      setHasChanges((prev) => ({ ...prev, [id]: false }));
       setLastSaved(new Date());
       setShowSavedMessage(true);
-      setTimeout(() => setShowSavedMessage(false), 3000);
     } catch (error) {
-      console.error("Error saving row:", error);
+      console.error('Error saving question:', error);
     }
   };
-  
-  // We'll use a simpler approach with a modal for editing yes/no cells
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Drag & drop
+  // ─────────────────────────────────────────────────────────────────────────────
   const handleDragEnd = async (result: any) => {
     if (!result.destination) return;
-    
-    // Type assertion to avoid type errors
     const items: any[] = Array.from(rows);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
-    
-    // Update order positions
-    const updatedQuestions = items.map((item: any, index) => ({
-      id: item.id,
-      order_position: index
-    }));
-    
-    setRows(items.map((item: any, index) => ({
-      ...item,
-      order_position: index
-    })));
-    
+
+    const updatedQs = items.map((it, i) => ({ id: it.id, order_position: i }));
+    setRows(
+      items.map((it, i) => ({
+        ...it,
+        order_position: i,
+      }))
+    );
     try {
-      await updateQuestionOrder(updatedQuestions);
+      await updateQuestionOrder(updatedQs);
     } catch (error) {
-      console.error("Error updating question order:", error);
+      console.error('Error updating question order:', error);
     }
   };
 
-  // Custom drag and drop handlers for table rows
   const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, index: number) => {
     e.dataTransfer.setData('text/plain', rows[index].id);
     e.dataTransfer.effectAllowed = 'move';
-    const row = e.currentTarget;
-    row.classList.add('opacity-50');
+    e.currentTarget.classList.add('opacity-50');
   };
-
   const handleRowDragOver = (e: React.DragEvent<HTMLTableRowElement>) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
-
   const handleRowDrop = (e: React.DragEvent<HTMLTableRowElement>, targetIndex: number) => {
     e.preventDefault();
     const id = e.dataTransfer.getData('text/plain');
-    const sourceIndex = rows.findIndex(row => row.id === id);
-    
+    const sourceIndex = rows.findIndex((row) => row.id === id);
     if (sourceIndex !== targetIndex) {
       handleDragEnd({
         source: { index: sourceIndex },
-        destination: { index: targetIndex }
+        destination: { index: targetIndex },
       });
     }
   };
-
   const handleRowDragEnd = (e: React.DragEvent<HTMLTableRowElement>) => {
     e.currentTarget.classList.remove('opacity-50');
   };
-  
-  // Helper function to get question index by id
-  const getQuestionIndexById = (id: string | null | undefined) => {
-    if (!id) return "";
-    const question = questions.find((q: any) => q.id === id);
-    return question ? `${question.order_position + 1}` : "";
-  };
-  
-  // Helper function to get resource title by id
 
-  const getResourceTitle = (type: 'hint' | 'learn' | 'action' | 'terminate', id: string | null) => {
-    if (!id) return "";
-    
-    let resource = null;
-    switch(type) {
-      case 'hint':
-        resource = hints.find((h: any) => h.id === id);
-        if (!resource) {
-          console.warn(`Hint with ID ${id} not found`);
-          return "";
-        }
-        return resource.title || "";
-        
-      case 'learn':
-        resource = learns.find((l: any) => l.id === id);
-        if (!resource) {
-          console.warn(`Learn with ID ${id} not found`);
-          return "";
-        }
-        return resource.title || "";
-        
-      case 'action':
-        resource = actions.find((a: any) => a.id === id);
-        if (!resource) {
-          console.warn(`Action with ID ${id} not found`);
-          return "";
-        }
-        // For actions, return a truncated version of the content for display
-        return truncateText(resource.content || "", 50);
-        
-      case 'terminate':
-        resource = terminates.find((t: any) => t.id === id);
-        if (!resource) {
-          console.warn(`Terminate with ID ${id} not found`);
-          return "";
-        }
-        // For terminates, return a truncated version of the content for display
-        return truncateText(resource.content || "", 50);
-        
-      default:
-        return "";
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Resource Modal for hint/learn columns
+  // ─────────────────────────────────────────────────────────────────────────────
+  const openResourceModal = (rowId: string, resourceType: ResourceModalType) => {
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+
+    let currentId: string | null = null;
+    if (resourceType === 'hints_title') currentId = row.hint_title_id;
+    if (resourceType === 'hints_content') currentId = row.hint_content_id;
+    if (resourceType === 'learn_title') currentId = row.learn_title_id;
+    if (resourceType === 'learn_content') currentId = row.learn_content_id;
+
+    setSelectedResourceId(currentId || null);
+    setResourceModal({ open: true, rowId, resourceType });
+  };
+
+  const closeResourceModal = () => {
+    setResourceModal(null);
+    setSelectedResourceId(null);
+  };
+
+  const handleConfirmResourceModal = async () => {
+    if (!resourceModal) return;
+    const { rowId, resourceType } = resourceModal;
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) {
+      closeResourceModal();
+      return;
     }
-  };
-  
-  // Helper function to truncate text for display
-  const truncateText = (text: string, maxLength: number): string => {
-    if (!text) return "";
-    // Remove HTML tags for length calculation
-    const plainText = text.replace(/<[^>]*>/g, '');
-    if (plainText.length <= maxLength) return text;
-    return plainText.substring(0, maxLength) + '...';
-  };
 
-  // Helper function to get resource content by id
-  const getResourceContent = (type: 'hint' | 'learn', id: string | null) => {
-    if (!id) return "";
-    
-    let resource = null;
-    switch(type) {
-      case 'hint':
-        resource = hints.find((h: any) => h.id === id);
-        if (!resource) {
-          console.warn(`Hint with ID ${id} not found`);
-          return "";
-        }
-        return resource.content || "";
-      case 'learn':
-        resource = learns.find((l: any) => l.id === id);
-        if (!resource) {
-          console.warn(`Learn with ID ${id} not found`);
-          return "";
-        }
-        return resource.content || "";
-      default:
-        return "";
+    const updateFields: Record<string, string | null> = {};
+
+    if (resourceType === 'hints_title') updateFields.hint_title_id = selectedResourceId || null;
+    if (resourceType === 'hints_content') updateFields.hint_content_id = selectedResourceId || null;
+    if (resourceType === 'learn_title') updateFields.learn_title_id = selectedResourceId || null;
+    if (resourceType === 'learn_content') updateFields.learn_content_id = selectedResourceId || null;
+
+    try {
+      // Update local rows
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.id !== rowId) return r;
+          return { ...r, ...updateFields };
+        })
+      );
+      // Update DB
+      await updateQuestion(rowId, updateFields);
+
+      setLastSaved(new Date());
+      setShowSavedMessage(true);
+    } catch (err) {
+      console.error('Error updating resource field:', err);
     }
+
+    closeResourceModal();
   };
 
-  // Note: We no longer need the stripHtml function since we're using the rich text editor exclusively
-
-  // Function to render the content of a cell with a preview of formatted text
-  const renderCellContent = (content: string) => {
-    if (!content) return <div className="min-h-[40px]"></div>;
-    
-    return (
-      <div 
-        className="text-sm min-h-[40px] max-h-[120px] overflow-hidden relative"
-        dangerouslySetInnerHTML={{ __html: content }}
-      >
-      </div>
-    );
-  };
-
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Main return
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="overflow-x-auto">
       <div className="mb-4 flex justify-between items-center">
@@ -813,7 +505,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
         <div className="flex items-center gap-4">
           {showSavedMessage && (
             <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm">
-              <CheckCircle size={14} className="mr-1" /> 
+              <CheckCircle size={14} className="mr-1" />
               Changes saved
             </div>
           )}
@@ -825,7 +517,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           </button>
         </div>
       </div>
-      
+
       <div className="border border-gray-300 rounded-lg overflow-hidden">
         <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
           <table className="min-w-full divide-y divide-gray-200 border-collapse">
@@ -834,7 +526,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                 <th className="px-2 py-2 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-10">
                   #
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-72">
+                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-32">
                   <div className="flex items-center">
                     QUESTION <ChevronDown size={14} className="ml-1" />
                   </div>
@@ -854,7 +546,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                     HINT TITLE <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-60">
+                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-28">
                   <div className="flex items-center">
                     HINT CONTENT <ChevronDown size={14} className="ml-1" />
                   </div>
@@ -864,524 +556,371 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                     LEARN TITLE <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-60">
+                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-28">
                   <div className="flex items-center">
                     LEARN CONTENT <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-60">
+                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-32">
                   <div className="flex items-center">
                     ACTION <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-60">
+                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-32">
                   <div className="flex items-center">
                     ANSWER TERMINATE <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
               </tr>
             </thead>
-              
             <tbody className="bg-white divide-y divide-gray-200">
-                {rows.map((row, index) => (
-                  <React.Fragment key={row.id}>
-                    {/* Insert button row */}
-                    {!showInsertForm && insertIndex === index && (
-                      <tr className="bg-blue-50">
-                        <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
-                          <button
-                            className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
-                            onClick={() => {
-                              setShowInsertForm(true);
-                              // Ensure scrolling to the position of the insert row
-                              setTimeout(() => {
-                                const element = document.getElementById(`insert-form-${index}`);
-                                if (element) {
-                                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                }
-                              }, 100);
-                            }}
-                          >
-                            <Plus size={14} className="mr-1" /> Insert new question here
-                          </button>
-                        </td>
-                      </tr>
-                    )}
-                    
-                    {/* Insert form */}
-                    {showInsertForm && insertIndex === index && (
-                      <tr className="bg-blue-50" id={`insert-form-${index}`}>
-                        <td colSpan={10} className="px-2 py-2 border border-gray-300">
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="text"
-                              value={newQuestionText}
-                              onChange={(e) => setNewQuestionText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleInsertQuestion(index);
-                                }
-                              }}
-                              placeholder="Enter new question text"
-                              className="border border-gray-300 p-2 rounded-md flex-grow text-sm"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleInsertQuestion(index)}
-                              className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700"
-                            >
-                              Insert
-                            </button>
-                            <button
-                              onClick={() => {
-                                setShowInsertForm(false);
-                                setNewQuestionText('');
-                              }}
-                              className="bg-gray-500 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-600"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    
-                    {/* Question row */}
-                    <tr 
-                      key={row.id}
-                      className={`${isEditing[row.id] ? "bg-blue-50" : index % 2 === 0 ? "bg-gray-50" : "bg-white"} transition-colors duration-200`}
-                      draggable={true}
-                      onDragStart={(e) => handleRowDragStart(e, index)}
-                      onDragOver={handleRowDragOver}
-                      onDrop={(e) => handleRowDrop(e, index)}
-                      onDragEnd={handleRowDragEnd}
+              {/* Insert button above first row if needed */}
+              {!showInsertForm && insertIndex === 0 && (
+                <tr className="bg-blue-50">
+                  <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
+                    <button
+                      className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
                       onClick={() => {
-                        // Toggle edit mode for the row
-                        setIsEditing({...isEditing, [row.id]: !isEditing[row.id]});
+                        setShowInsertForm(true);
+                        setTimeout(() => {
+                          document.getElementById(`insert-form-0`)?.scrollIntoView({ behavior: 'smooth' });
+                        }, 100);
                       }}
-                      data-id={row.id}
-                      data-index={index}
                     >
-                        {/* Row number cell */}
-                        <td className="px-2 py-1 text-center border border-gray-300">
-                          <div className="flex items-center justify-center cursor-move">
-                            <span className="font-mono text-xs text-gray-500 mr-1">{index + 1}</span>
-                            <ArrowUpDown size={14} className="text-gray-500" />
-                          </div>
-                        </td>
+                      <Plus size={14} className="mr-1" /> Insert new question here
+                    </button>
+                  </td>
+                </tr>
+              )}
 
-                        {/* Question text cell */}
-                        <td className="px-2 py-1 whitespace-normal border border-gray-300">
-                          {isEditing[row.id] ? (
-                            <div className="p-1">
-                              <div 
-                                className="w-full text-left bg-white p-2 border border-blue-300 rounded hover:bg-blue-50 cursor-pointer"
-                                onClick={() => openCellModal(row.id, 'text', row.text)}
-                              >
-                                {renderCellContent(row.text) || <span className="text-gray-400">Click to edit...</span>}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex">
-                              <div 
-                                className="text-sm cursor-pointer hover:text-indigo-600 flex-grow"
-                                onClick={() => openCellModal(row.id, 'text', row.text)}
-                              >
-                                {renderCellContent(row.text)}
-                              </div>
-                              <div className="flex flex-shrink-0">
-                                <button 
-                                  className="text-indigo-400 hover:text-indigo-600 p-1"
-                                  onClick={() => {
-                                    if (insertIndex === index) {
-                                      setInsertIndex(null);
-                                    } else {
-                                      setInsertIndex(index);
-                                      setShowInsertForm(false);
-                                    }
-                                  }}
-                                  title="Insert question here"
-                                >
-                                  <Plus size={14} />
-                                </button>
-                                <button
-                                  className="text-red-400 hover:text-red-600 p-1"
-                                  onClick={() => {
-                                    setDeleteConfirmId(row.id);
-                                    setShowDeleteConfirm(true);
-                                  }}
-                                  title="Delete question"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Yes leads to cell */}
-                        <td 
-                          className="px-2 py-1 text-center border border-gray-300"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isEditing[row.id]) {
-                              setDirectEditCell({rowId: row.id, field: 'yes_leads_to'});
-                            }
+              {rows.map((row, index) => (
+                <React.Fragment key={row.id}>
+                  {/* Insert row between existing rows */}
+                  {!showInsertForm && insertIndex === index && (
+                    <tr className="bg-blue-50">
+                      <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
+                        <button
+                          className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
+                          onClick={() => {
+                            setShowInsertForm(true);
+                            setTimeout(() => {
+                              document
+                                .getElementById(`insert-form-${index}`)
+                                ?.scrollIntoView({ behavior: 'smooth' });
+                            }, 100);
                           }}
                         >
-                          {isEditing[row.id] ? (
-                            <select
-                              value={row.yes_leads_to || ''}
-                              onChange={(e) => handleCellChange(row.id, 'yes_leads_to', e.target.value || undefined)}
-                              className="w-full border rounded-md p-1 text-sm"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <option value="">-</option>
-                              {questions
-                                .filter(q => q.id !== row.id)
-                                .map(q => (
-                                  <option key={q.id} value={q.id}>
-                                    {q.order_position + 1}
-                                  </option>
-                                ))
+                          <Plus size={14} className="mr-1" /> Insert new question here
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* Insert form row */}
+                  {showInsertForm && insertIndex === index && (
+                    <tr className="bg-blue-50" id={`insert-form-${index}`}>
+                      <td colSpan={10} className="px-2 py-2 border border-gray-300">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={newQuestionText}
+                            onChange={(e) => setNewQuestionText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleInsertQuestion(index);
                               }
-                            </select>
-                          ) : (
-                            <div className="text-sm text-center cursor-pointer hover:text-indigo-600 font-medium">
-                              {getQuestionIndexById(row.yes_leads_to)}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* No leads to cell */}
-                        <td 
-                          className="px-2 py-1 text-center border border-gray-300"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isEditing[row.id]) {
-                              setDirectEditCell({rowId: row.id, field: 'no_leads_to'});
-                            }
-                          }}
-                        >
-                          {isEditing[row.id] ? (
-                            <select
-                              value={row.no_leads_to || ''}
-                              onChange={(e) => handleCellChange(row.id, 'no_leads_to', e.target.value || undefined)}
-                              className="w-full border rounded-md p-1 text-sm"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <option value="">-</option>
-                              {questions
-                                .filter(q => q.id !== row.id)
-                                .map(q => (
-                                  <option key={q.id} value={q.id}>
-                                    {q.order_position + 1}
-                                  </option>
-                                ))
-                              }
-                            </select>
-                          ) : (
-                            <div className="text-sm text-center cursor-pointer hover:text-indigo-600 font-medium">
-                              {getQuestionIndexById(row.no_leads_to)}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Hint title cell */}
-                        <td className="px-2 py-1 border border-gray-300">
-                          {isEditing[row.id] ? (
-                            <div className="p-1">
-                              <ResourceSelector 
-                                resourceType="hints_title" 
-                                onSelect={(resource) => {
-                                  handleResourceChange(row.id, 'hint_title_id', resource.id);
-                                }}
-                                currentValue={row.hint_title_id}
-                              />
-                            </div>
-                          ) : (
-                            <div 
-                              className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => openCellModal(row.id, 'hint_title', getResourceTitle('hint', row.hint_id))}
-                            >
-                              {renderCellContent(getResourceTitle('hint', row.hint_id))}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Hint content cell */}
-                        <td className="px-2 py-1 border border-gray-300">
-                          {isEditing[row.id] ? (
-                            <div className="p-1">
-                              <ResourceSelector 
-                                resourceType="hints_content" 
-                                onSelect={(resource) => {
-                                  handleResourceChange(row.id, 'hint_content_id', resource.id);
-                                }}
-                                currentValue={row.hint_content_id}
-                              />
-                            </div>
-                          ) : (
-                            <div 
-                              className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => openCellModal(row.id, 'hint_content', getResourceContent('hint', row.hint_id))}
-                            >
-                              {renderCellContent(getResourceContent('hint', row.hint_id))}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Learn title cell */}
-                        <td className="px-2 py-1 border border-gray-300">
-                          {isEditing[row.id] ? (
-                            <div className="p-1">
-                              <ResourceSelector 
-                                resourceType="learn_title" 
-                                onSelect={(resource) => {
-                                  handleResourceChange(row.id, 'learn_title_id', resource.id);
-                                }}
-                                currentValue={row.learn_title_id}
-                              />
-                            </div>
-                          ) : (
-                            <div 
-                              className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => openCellModal(row.id, 'learn_title', getResourceTitle('learn', row.learn_id))}
-                            >
-                              {renderCellContent(getResourceTitle('learn', row.learn_id))}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Learn content cell */}
-                        <td className="px-2 py-1 border border-gray-300">
-                          {isEditing[row.id] ? (
-                            <div className="p-1">
-                              <ResourceSelector 
-                                resourceType="learn_content" 
-                                onSelect={(resource) => {
-                                  handleResourceChange(row.id, 'learn_content_id', resource.id);
-                                }}
-                                currentValue={row.learn_content_id}
-                              />
-                            </div>
-                          ) : (
-                            <div 
-                              className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => openCellModal(row.id, 'learn_content', getResourceContent('learn', row.learn_id))}
-                            >
-                              {renderCellContent(getResourceContent('learn', row.learn_id))}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Action cell */}
-                        <td className="px-2 py-1 border border-gray-300">
-                          {isEditing[row.id] ? (
-                            <div className="p-1">
-                              <div 
-                                className="w-full text-left bg-white p-2 border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openCellModal(row.id, 'action_content', resourceEdits[row.id]?.action_content || '');
-                                }}
-                              >
-                                {renderCellContent(resourceEdits[row.id]?.action_content || '') || <span className="text-gray-400">Click to edit...</span>}
-                              </div>
-                              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                  Trigger action on:
-                                </label>
-                                <select
-                                  value={resourceEdits[row.id]?.action_trigger || ''}
-                                  onChange={(e) => handleResourceChange(row.id, 'action_trigger', e.target.value || null)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="w-full border rounded-md p-1 text-sm"
-                                >
-                                  <option value="" onClick={(e) => e.stopPropagation()}>No trigger (always include in action plan)</option>
-                                  <option value="yes" onClick={(e) => e.stopPropagation()}>"Yes" answer</option>
-                                  <option value="no" onClick={(e) => e.stopPropagation()}>"No" answer</option>
-                                </select>
-                              </div>
-                            </div>
-                          ) : (
-                            <div 
-                              className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => {
-                                // Get the full action content directly from the actions array
-                                const actionContent = row.action_id 
-                                  ? actions.find(a => a.id === row.action_id)?.content || "" 
-                                  : "";
-                                openCellModal(row.id, 'action_content', actionContent);
-                              }}
-                            >
-                              {renderCellContent(getResourceTitle('action', row.action_id))}
-                              {row.action_id && row.action_trigger && (
-                                <div className="mt-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
-                                  Trigger on: {row.action_trigger === 'yes' ? 'Yes' : 'No'}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Terminate cell */}
-                        <td className="px-2 py-1 border border-gray-300">
-                          {isEditing[row.id] ? (
-                            <div className="p-1">
-                              <div 
-                                className="w-full text-left bg-white p-2 border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openCellModal(row.id, 'terminate_content', resourceEdits[row.id]?.terminate_content || '');
-                                }}
-                              >
-                                {renderCellContent(resourceEdits[row.id]?.terminate_content || '') || <span className="text-gray-400">Click to edit...</span>}
-                              </div>
-                              <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                  Trigger terminate on:
-                                </label>
-                                <select
-                                  value={resourceEdits[row.id]?.terminate_trigger || ''}
-                                  onChange={(e) => handleResourceChange(row.id, 'terminate_trigger', e.target.value || null)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="w-full border rounded-md p-1 text-sm"
-                                >
-                                  <option value="" onClick={(e) => e.stopPropagation()}>No trigger (never terminate)</option>
-                                  <option value="yes" onClick={(e) => e.stopPropagation()}>"Yes" answer</option>
-                                  <option value="no" onClick={(e) => e.stopPropagation()}>"No" answer</option>
-                                </select>
-                              </div>
-                              <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-                                <label className="flex items-center text-xs font-medium text-gray-700 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={row.hasupload || false}
-                                    onChange={(e) => handleResourceChange(row.id, 'hasupload', e.target.checked)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                  />
-                                  Requires file upload
-                                </label>
-                              </div>
-                            </div>
-                          ) : (
-                            <div 
-                              className="text-sm cursor-pointer hover:text-indigo-600 min-h-[40px]"
-                              onClick={() => {
-                                // Get the full terminate content directly from the terminates array
-                                const terminateContent = row.terminate_id 
-                                  ? terminates.find(t => t.id === row.terminate_id)?.content || "" 
-                                  : "";
-                                openCellModal(row.id, 'terminate_content', terminateContent);
-                              }}
-                            >
-                              {renderCellContent(getResourceTitle('terminate', row.terminate_id))}
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {row.terminate_id && row.terminate_trigger && (
-                                  <div className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800">
-                                    Trigger on: {row.terminate_trigger === 'yes' ? 'Yes' : 'No'}
-                                  </div>
-                                )}
-                                {row.hasupload && (
-                                  <div className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
-                                    <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12" />
-                                    </svg>
-                                    File Upload
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Save button cell - only visible when editing */}
-                        {isEditing[row.id] && (
-                          <td className="px-2 py-1 border border-gray-300 bg-blue-50">
-                            <button
-                              onClick={() => handleSaveRow(row.id)}
-                              className="bg-green-600 text-white px-2 py-1 rounded-md text-xs hover:bg-green-700 w-full"
-                            >
-                              Save
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                  </React.Fragment>
-                ))}
-                
-                {/* Add insert at end button after all rows */}
-                {(rows.length === 0 || insertIndex === rows.length) && (
-                  <>
-                    {!showInsertForm && (
-                      <tr className="bg-blue-50">
-                        <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
-                          <button
-                            className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
-                            onClick={() => {
-                              setShowInsertForm(true);
-                              // Focus on the input field after rendering
-                              setTimeout(() => {
-                                const element = document.getElementById('insert-form-end');
-                                if (element) {
-                                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                }
-                              }, 100);
                             }}
+                            placeholder="Enter new question text"
+                            className="border border-gray-300 p-2 rounded-md flex-grow text-sm"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleInsertQuestion(index)}
+                            className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700"
                           >
-                            <Plus size={14} className="mr-1" /> Insert new question here
+                            Insert
                           </button>
-                        </td>
-                      </tr>
-                    )}
-                    
-                    {showInsertForm && (
-                      <tr className="bg-blue-50" id="insert-form-end">
-                        <td colSpan={10} className="px-2 py-2 border border-gray-300">
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="text"
-                              value={newQuestionText}
-                              onChange={(e) => setNewQuestionText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleInsertQuestion(rows.length);
-                                }
-                              }}
-                              placeholder="Enter new question text"
-                              className="border border-gray-300 p-2 rounded-md flex-grow text-sm"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleInsertQuestion(rows.length)}
-                              className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700"
-                            >
-                              Insert
-                            </button>
-                            <button
-                              onClick={() => {
+                          <button
+                            onClick={() => {
+                              setShowInsertForm(false);
+                              setNewQuestionText('');
+                            }}
+                            className="bg-gray-500 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-600"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* Main question row */}
+                  <tr
+                    className={`${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} transition-colors`}
+                    draggable={true}
+                    onDragStart={(e) => handleRowDragStart(e, index)}
+                    onDragOver={handleRowDragOver}
+                    onDrop={(e) => handleRowDrop(e, index)}
+                    onDragEnd={handleRowDragEnd}
+                    data-id={row.id}
+                    data-index={index}
+                  >
+                    {/* ORDER # */}
+                    <td className="px-2 py-1 text-center border border-gray-300 w-10">
+                      <div className="flex items-center justify-center cursor-move">
+                        <span className="font-mono text-xs text-gray-500 mr-1">{index + 1}</span>
+                        <ArrowUpDown size={14} className="text-gray-500" />
+                      </div>
+                    </td>
+
+                    {/* QUESTION TEXT (click to open modal) */}
+                    <td className="px-2 py-1 whitespace-normal border border-gray-300 w-32">
+                      <div className="flex">
+                        <div
+                          className="text-sm cursor-pointer hover:text-indigo-600 flex-grow overflow-hidden whitespace-nowrap text-ellipsis"
+                          onClick={() => openCellModal(row.id, 'text', row.text)}
+                        >
+                          {renderCellPreview(row.text)}
+                        </div>
+                        <div className="flex flex-shrink-0">
+                          {/* Insert button */}
+                          <button
+                            className="text-indigo-400 hover:text-indigo-600 p-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (insertIndex === index) setInsertIndex(null);
+                              else {
+                                setInsertIndex(index);
                                 setShowInsertForm(false);
-                                setNewQuestionText('');
-                              }}
-                              className="bg-gray-500 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-600"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                )}
-              </tbody>
+                              }
+                            }}
+                            title="Insert question here"
+                          >
+                            <Plus size={14} />
+                          </button>
+                          {/* Delete button */}
+                          <button
+                            className="text-red-400 hover:text-red-600 p-1"
+                            onClick={() => {
+                              setDeleteConfirmId(row.id);
+                              setShowDeleteConfirm(true);
+                            }}
+                            title="Delete question"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* YES LEADS TO */}
+                    <td
+                      className="px-2 py-1 text-center border border-gray-300 w-16 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDirectEditCell({ rowId: row.id, field: 'yes_leads_to' });
+                      }}
+                    >
+                      <div className="text-sm text-center hover:text-indigo-600 font-medium">
+                        {getQuestionIndexById(row.yes_leads_to)}
+                      </div>
+                    </td>
+
+                    {/* NO LEADS TO */}
+                    <td
+                      className="px-2 py-1 text-center border border-gray-300 w-16 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDirectEditCell({ rowId: row.id, field: 'no_leads_to' });
+                      }}
+                    >
+                      <div className="text-sm text-center hover:text-indigo-600 font-medium">
+                        {getQuestionIndexById(row.no_leads_to)}
+                      </div>
+                    </td>
+
+                    {/* HINT TITLE (open resource modal) */}
+                    <td
+                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      onClick={() => openResourceModal(row.id, 'hints_title')}
+                      title="Click to select a hint title"
+                    >
+                      {renderCellPreview(getResourceTitlePreview('hint', row.hint_title_id))}
+                    </td>
+
+                    {/* HINT CONTENT (open resource modal) */}
+                    <td
+                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      onClick={() => openResourceModal(row.id, 'hints_content')}
+                      title="Click to select a hint content"
+                    >
+                      {renderCellPreview(getResourceContentPreview('hint', row.hint_content_id))}
+                    </td>
+
+                    {/* LEARN TITLE (open resource modal) */}
+                    <td
+                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      onClick={() => openResourceModal(row.id, 'learn_title')}
+                      title="Click to select a learn title"
+                    >
+                      {renderCellPreview(getResourceTitlePreview('learn', row.learn_title_id))}
+                    </td>
+
+                    {/* LEARN CONTENT (open resource modal) */}
+                    <td
+                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      onClick={() => openResourceModal(row.id, 'learn_content')}
+                      title="Click to select a learn content"
+                    >
+                      {renderCellPreview(getResourceContentPreview('learn', row.learn_content_id))}
+                    </td>
+
+                    {/* ACTION (always clickable + triggers) */}
+                    <td className="px-2 py-1 border border-gray-300 w-32">
+                      {/* Click to edit action content */}
+                      <div
+                        className="w-full text-left p-2 bg-white border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCellModal(row.id, 'action_content', getActionContent(row));
+                        }}
+                      >
+                        {renderCellPreview(getActionContent(row))}
+                      </div>
+                      {/* Action trigger */}
+                      <div className="mt-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Trigger action on:
+                        </label>
+                        <select
+                          value={row.action_trigger || ''}
+                          onChange={(e) =>
+                            handleCellChange(row.id, 'action_trigger', e.target.value || null)
+                          }
+                          className="w-full border rounded-md p-1 text-sm"
+                        >
+                          <option value="">No trigger (always include)</option>
+                          <option value="yes">"Yes" answer</option>
+                          <option value="no">"No" answer</option>
+                        </select>
+                      </div>
+                    </td>
+
+                    {/* TERMINATE (always clickable + triggers + hasupload) */}
+                    <td className="px-2 py-1 border border-gray-300 w-32">
+                      {/* Click to edit terminate content */}
+                      <div
+                        className="w-full text-left p-2 bg-white border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCellModal(row.id, 'terminate_content', getTerminateContent(row));
+                        }}
+                      >
+                        {renderCellPreview(getTerminateContent(row))}
+                      </div>
+                      {/* Terminate trigger */}
+                      <div className="mt-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Trigger terminate on:
+                        </label>
+                        <select
+                          value={row.terminate_trigger || ''}
+                          onChange={(e) =>
+                            handleCellChange(row.id, 'terminate_trigger', e.target.value || null)
+                          }
+                          className="w-full border rounded-md p-1 text-sm"
+                        >
+                          <option value="">No trigger</option>
+                          <option value="yes">"Yes" answer</option>
+                          <option value="no">"No" answer</option>
+                        </select>
+                      </div>
+                      {/* hasupload checkbox */}
+                      <div className="mt-3">
+                        <label className="flex items-center text-xs font-medium text-gray-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={row.hasupload || false}
+                            onChange={(e) => handleCellChange(row.id, 'hasupload', e.target.checked)}
+                            className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          Requires file upload
+                        </label>
+                      </div>
+                    </td>
+                  </tr>
+                </React.Fragment>
+              ))}
+
+              {/* Insert at end */}
+              {(rows.length === 0 || insertIndex === rows.length) && (
+                <>
+                  {!showInsertForm && (
+                    <tr className="bg-blue-50">
+                      <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
+                        <button
+                          className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
+                          onClick={() => {
+                            setShowInsertForm(true);
+                            setInsertIndex(rows.length);
+                            setTimeout(() => {
+                              document
+                                .getElementById('insert-form-end')
+                                ?.scrollIntoView({ behavior: 'smooth' });
+                            }, 100);
+                          }}
+                        >
+                          <Plus size={14} className="mr-1" /> Insert new question here
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                  {showInsertForm && insertIndex === rows.length && (
+                    <tr className="bg-blue-50" id="insert-form-end">
+                      <td colSpan={10} className="px-2 py-2 border border-gray-300">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={newQuestionText}
+                            onChange={(e) => setNewQuestionText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleInsertQuestion(rows.length);
+                              }
+                            }}
+                            placeholder="Enter new question text"
+                            className="border border-gray-300 p-2 rounded-md flex-grow text-sm"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleInsertQuestion(rows.length)}
+                            className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700"
+                          >
+                            Insert
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowInsertForm(false);
+                              setNewQuestionText('');
+                            }}
+                            className="bg-gray-500 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-600"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              )}
+            </tbody>
           </table>
         </div>
       </div>
-      
+
+      {/* Insert at end button + Add Question button below table */}
       <div className="mt-4 flex justify-between">
         <button
           onClick={() => {
@@ -1399,42 +938,45 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           <Plus size={18} className="mr-1" /> Add Question
         </button>
       </div>
-      
+
+      {/* Unsaved changes warning */}
       {hasChanges && Object.values(hasChanges).some(Boolean) && (
         <div className="mt-4 bg-amber-50 p-3 rounded-md border border-amber-200 flex items-center">
           <AlertCircle size={18} className="text-amber-500 mr-2" />
           <span className="text-amber-700 text-sm">
-            You have unsaved changes. Press Enter to save or wait for auto-save (every minute).
+            You have unsaved changes. They will auto-save every minute, or when you close the editor
+            modals.
           </span>
         </div>
       )}
-      
       {lastSaved && (
         <div className="mt-2 text-xs text-gray-500 text-right">
           Last saved: {lastSaved.toLocaleTimeString()}
         </div>
       )}
 
-      {/* Rich Text Editor Modal */}
+      {/* RichTextEditor Modal */}
       {showCellModal && (
         <Modal
           isOpen={showCellModal}
           onClose={() => setShowCellModal(false)}
-          title="Edit Content"
+          title={`Edit ${currentCellField.replace(/_/g, ' ')}`}
         >
-          <div className="mb-4">
+          <div className="mb-4 min-h-[200px]">
             <Suspense fallback={<EditorLoading />}>
               <RichTextEditor
                 value={currentCellContent}
                 onChange={setCurrentCellContent}
-                minHeight={300}
-                placeholder="Enter content..."
+                placeholder={`Enter ${currentCellField.replace(/_/g, ' ')}...`}
                 onKeyDown={(e) => {
-                  // Handle Enter key (without shift)
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    // The ReactQuillEditor component has already updated the value
-                    // and prevented default behavior, so we just need to save
+                  // Ctrl/Cmd+S => Save
+                  if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+                    e.preventDefault();
                     handleSaveAndCloseModal();
+                  }
+                  // Escape => Cancel
+                  if (e.key === 'Escape') {
+                    setShowCellModal(false);
                   }
                 }}
               />
@@ -1457,7 +999,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
         </Modal>
       )}
 
-      {/* Yes/No Leads To Modal */}
+      {/* Modal for Yes/No leads to quick edit */}
       {directEditCell && (
         <Modal
           isOpen={Boolean(directEditCell)}
@@ -1469,22 +1011,21 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
               Select question to link to:
             </label>
             <select
-              value={rows.find(r => r.id === directEditCell.rowId)?.[directEditCell.field] || ''}
+              value={rows.find((r) => r.id === directEditCell.rowId)?.[directEditCell.field] || ''}
               onChange={(e) => {
-                handleCellChange(directEditCell.rowId, directEditCell.field, e.target.value || undefined);
+                handleCellChange(directEditCell.rowId, directEditCell.field, e.target.value || null);
               }}
               className="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               autoFocus
             >
               <option value="">- None -</option>
               {questions
-                .filter(q => q.id !== directEditCell.rowId)
-                .map(q => (
+                .filter((q) => q.id !== directEditCell.rowId)
+                .map((q) => (
                   <option key={q.id} value={q.id}>
                     Question {q.order_position + 1}
                   </option>
-                ))
-              }
+                ))}
             </select>
           </div>
           <div className="flex justify-end space-x-2">
@@ -1509,7 +1050,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
         </Modal>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation */}
       <Modal
         isOpen={showDeleteConfirm}
         onClose={() => {
@@ -1543,13 +1084,44 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
           </button>
         </div>
       </Modal>
-      
-      {/* Notepad Component */}
-      {showNotepad && (
-        <Notepad 
-          surveyId={surveyId}
-          onClose={() => setShowNotepad(false)}
-        />
+
+      {/* Notepad */}
+      {showNotepad && <Notepad surveyId={surveyId} onClose={() => setShowNotepad(false)} />}
+
+      {/* Resource Modal for hints/learn */}
+      {resourceModal && (
+        <Modal
+          isOpen={resourceModal.open}
+          onClose={closeResourceModal}
+          title={`Select ${resourceModal.resourceType.replace('_', ' ')}`}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Search or select an existing resource from the list below:
+            </p>
+            <ResourceSelector
+              resourceType={resourceModal.resourceType}
+              currentValue={selectedResourceId}
+              onSelect={(resource) => {
+                setSelectedResourceId(resource.id);
+              }}
+            />
+          </div>
+          <div className="mt-6 flex justify-end space-x-2">
+            <button
+              onClick={closeResourceModal}
+              className="bg-gray-500 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmResourceModal}
+              className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700"
+            >
+              Confirm
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

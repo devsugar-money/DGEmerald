@@ -2,20 +2,21 @@
 
 ## Overview
 
-DecideGuide is a powerful, interactive decision tree builder application that helps users create, manage, and share decision trees to guide others through complex decision-making processes. Built with modern web technologies, this tool allows you to construct yes/no question paths that lead users to different outcomes, supplemented with helpful resources, learning materials, and actionable items.
+DecideGuide is a powerful, interactive decision tree builder application that helps users create, manage, and share decision trees to guide others through complex decision-making processes. Built with modern web technologies, this tool allows you to construct yes/no question paths that lead users to different outcomes, supplemented with helpful resources, learning materials, and actionable items. With its latest updates, the application offers an enhanced spreadsheet-like editor for more intuitive question management and resource linking.
 
 ![DecideGuide](https://images.unsplash.com/photo-1506784983877-45594efa4cbe?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80)
 
 ## Features
 
 - **Interactive Decision Trees**: Build decision trees with yes/no questions and customized paths.
-- **Resource Enrichment**: Add hints, learning materials, and action items to each question.
-- **Action Plans**: Automatically generate action plans based on user responses.
+- **Resource Enrichment**: Add hints, learning materials, and action items to each question using a modular resource system.
+- **Action Plans**: Automatically generate action plans based on user responses with trigger conditions.
 - **User Authentication**: Secure login and registration system.
 - **Responsive Design**: Works seamlessly on desktop, tablet, and mobile devices.
 - **Real-time Updates**: Changes to decision trees are saved automatically.
-- **Drag-and-Drop Interface**: Easily reorder questions in the spreadsheet editor.
-- **Rich Text Editing**: Format hints and learning materials with a WYSIWYG editor.
+- **Drag-and-Drop Interface**: Easily reorder questions in the streamlined spreadsheet editor.
+- **Rich Text Editing**: Format questions, actions, and terminate messages with a WYSIWYG editor.
+- **Resource Library**: Select from a central repository of pre-created hint and learn resources.
 
 ## Tech Stack
 
@@ -90,7 +91,13 @@ yarn dev
 
 ### Database Setup
 
-The project uses Supabase as its database. The database schema is defined in the migration files located in the `supabase/migrations` directory.
+The project uses Supabase as its backend and PostgreSQL database. The database schema includes specialized tables for handling various resource types:
+
+- `questions`: Core table storing all question data and relationships
+- `hints_title` & `hints_content`: Separate tables for hint resources
+- `learn_title` & `learn_content`: Separate tables for learning resources
+- `actions`: Stores action item content
+- `terminates`: Stores termination message content
 
 To set up the database:
 
@@ -109,12 +116,13 @@ The application allows users to create and manage surveys (decision trees). Each
 
 ### Question Editor
 
-The spreadsheet-like editor enables easy management of questions, including:
-- Setting question text
-- Defining "Yes" and "No" paths
-- Adding hints, learning materials, and action items
-- Setting termination messages
-- Configuring which answer (yes/no) triggers an action in the action plan
+The enhanced spreadsheet-like editor enables efficient management of questions, including:
+- Setting question text with rich-text formatting
+- Defining "Yes" and "No" paths between questions
+- Selecting hints and learning materials from a centralized resource library
+- Creating action items with custom trigger conditions (on Yes/No answers)
+- Setting termination messages with file upload capabilities
+- Intuitive modal interfaces for resource selection and editing
 
 ### Taking Surveys
 
@@ -135,11 +143,15 @@ End users can navigate through the decision tree by answering questions. They ca
 
 ### Editing Questions
 
-In the spreadsheet editor:
-- Click on a cell to edit its content
-- Use the dropdown menus to select which question to show next based on Yes/No answers
-- Add hints, learning materials, or action items as needed
-- Drag questions to reorder them
+In the improved spreadsheet editor:
+- Toggle edit mode for each row with a dedicated button
+- Click cells to edit content or select resources through modal interfaces
+- Use dropdown menus to connect questions based on Yes/No answers
+- Select from pre-existing hint and learn resources through dedicated popups
+- Create rich-text action and terminate content with a WYSIWYG editor
+- Specify triggers for actions and terminates (Yes/No answers)
+- Enable file upload requirements for specific questions
+- Drag questions to reorder them in the decision flow
 
 ### Action Plans
 

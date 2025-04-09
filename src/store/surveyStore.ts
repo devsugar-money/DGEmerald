@@ -29,8 +29,10 @@ interface QuestionsState {
 }
 
 interface ResourcesState {
-  hints: Hint[];
-  learns: Learn[];
+  hintTitles: Hint[];
+  hintContents: Hint[];
+  learnTitles: Learn[];
+  learnContents: Learn[];
   actions: Action[];
   terminates: Terminate[];
   createHint: (title: string, content: string) => Promise<Hint>;
@@ -58,8 +60,10 @@ export const useSurveyStore = create<SurveyState>((set) => ({
   questions: [],
   
   // Resources state
-  hints: [],
-  learns: [],
+  hintTitles: [],
+  hintContents: [],
+  learnTitles: [],
+  learnContents: [],
   actions: [],
   terminates: [],
   
@@ -366,7 +370,7 @@ export const useSurveyStore = create<SurveyState>((set) => ({
       
       if (error) throw error;
       
-      set((state) => ({ hints: [...state.hints, data] }));
+      set((state) => ({ hintTitles: [...state.hintTitles, data] }));
       
       return data;
     } catch (error) {
@@ -384,7 +388,7 @@ export const useSurveyStore = create<SurveyState>((set) => ({
       
       if (error) throw error;
       
-      set((state) => ({ learns: [...state.learns, data] }));
+      set((state) => ({ learnTitles: [...state.learnTitles, data] }));
       
       return data;
     } catch (error) {
@@ -477,22 +481,35 @@ export const useSurveyStore = create<SurveyState>((set) => ({
     set({ loading: true, error: null });
     
     try {
-      // Fetch all resources in parallel
-      const [hintsRes, learnsRes, actionsRes, terminatesRes] = await Promise.all([
-        supabase.from('hints').select('*'),
-        supabase.from('learns').select('*'),
+      // Fetch all specific resources in parallel
+      const [
+        hintTitlesRes, 
+        hintContentsRes, 
+        learnTitlesRes, 
+        learnContentsRes, 
+        actionsRes, 
+        terminatesRes
+      ] = await Promise.all([
+        supabase.from('hints_title' as any).select('*'), // Cast to any
+        supabase.from('hints_content' as any).select('*'), // Cast to any
+        supabase.from('learn_title' as any).select('*'), // Cast to any
+        supabase.from('learn_content' as any).select('*'), // Cast to any
         supabase.from('actions').select('*'),
         supabase.from('terminates').select('*'),
       ]);
       
-      if (hintsRes.error) throw hintsRes.error;
-      if (learnsRes.error) throw learnsRes.error;
+      if (hintTitlesRes.error) throw hintTitlesRes.error; 
+      if (hintContentsRes.error) throw hintContentsRes.error; 
+      if (learnTitlesRes.error) throw learnTitlesRes.error; 
+      if (learnContentsRes.error) throw learnContentsRes.error; 
       if (actionsRes.error) throw actionsRes.error;
       if (terminatesRes.error) throw terminatesRes.error;
-      
+
       set({
-        hints: hintsRes.data || [],
-        learns: learnsRes.data || [],
+        hintTitles: (hintTitlesRes.data as any[]) || [], // Cast data to any[]
+        hintContents: (hintContentsRes.data as any[]) || [], // Cast data to any[]
+        learnTitles: (learnTitlesRes.data as any[]) || [], // Cast data to any[]
+        learnContents: (learnContentsRes.data as any[]) || [], // Cast data to any[]
         actions: actionsRes.data || [],
         terminates: terminatesRes.data || [],
         loading: false,
@@ -532,8 +549,10 @@ export const useQuestions = () => useSurveyStore(state => ({
 }));
 
 export const useResources = () => useSurveyStore(state => ({
-  hints: state.hints,
-  learns: state.learns,
+  hintTitles: state.hintTitles,
+  hintContents: state.hintContents,
+  learnTitles: state.learnTitles,
+  learnContents: state.learnContents,
   actions: state.actions,
   terminates: state.terminates,
   loading: state.loading,
