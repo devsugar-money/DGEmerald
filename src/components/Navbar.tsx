@@ -23,10 +23,16 @@ const Navbar = () => {
           {user ? (
             <>
               <Link 
-                to="/dashboard" 
+                to="/questionnaire" 
                 className="text-gray-600 hover:text-primary-600 transition-colors"
               >
-                Dashboard
+                Questionnaire
+              </Link>
+              <Link 
+                to="/editor" 
+                className="text-gray-600 hover:text-primary-600 transition-colors"
+              >
+                Editor
               </Link>
               {isAdmin && (
                 <Link 

@@ -67,8 +67,8 @@ const SurveyEditor = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+    <div>
+      <div className="flex justify-between items-center mb-6 px-4 sm:px-6 lg:px-8">
         <div>
           <h1 className="text-2xl font-bold">{currentSurvey.name}</h1>
           <button
@@ -86,7 +86,7 @@ const SurveyEditor = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div>
         <Suspense fallback={<SpreadsheetLoading />}>
           <SpreadsheetEditor surveyId={id || ''} />
         </Suspense>

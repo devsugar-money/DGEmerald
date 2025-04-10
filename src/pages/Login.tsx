@@ -19,7 +19,7 @@ const Login = () => {
     
     try {
       await signIn(email, password);
-      navigate('/dashboard');
+      navigate('/questionnaire');
     } catch (error) {
       setError('Invalid email or password');
       console.error(error);

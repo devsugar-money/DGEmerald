@@ -2,6 +2,7 @@ import React, { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import App from './App.tsx';
+import './styles/root-reset.css';
 import './index.css';
 import { IconProvider } from './components/IconProvider';
 import AdminRoute from './components/AdminRoute';
@@ -24,12 +25,14 @@ const prefetchComponent = (importFn: () => Promise<ComponentModule>) => {
 };
 
 // Lazy load pages with prefetch for critical routes
+const Landing = prefetchComponent(() => import('./pages/Landing.tsx'));
 const Home = prefetchComponent(() => import('./pages/Home.tsx'));
 const Login = prefetchComponent(() => import('./pages/Login.tsx'));
 const Register = prefetchComponent(() => import('./pages/Register.tsx'));
 const TakeSurvey = lazy(() => import('./pages/TakeSurvey.tsx'));
 const ActionPlan = lazy(() => import('./pages/ActionPlan.tsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.tsx'));
+const Questionnaire = lazy(() => import('./pages/Questionnaire.tsx'));
 const SurveyBuilder = lazy(() => import('./pages/SurveyBuilder.tsx'));
 const SurveyEditor = lazy(() => import('./pages/SurveyEditor.tsx'));
 const ResourceManager = lazy(() => import('./pages/ResourceManager.tsx'));
@@ -43,6 +46,14 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
+        element: (
+          <Suspense fallback={<LoadingFallback />}>
+            <Landing />
+          </Suspense>
+        ),
+      },
+      {
+        path: '/home',
         element: (
           <Suspense fallback={<LoadingFallback />}>
             <Home />
@@ -82,10 +93,18 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/dashboard',
+        path: '/editor',
         element: (
           <Suspense fallback={<LoadingFallback />}>
             <Dashboard />
+          </Suspense>
+        ),
+      },
+      {
+        path: '/questionnaire',
+        element: (
+          <Suspense fallback={<LoadingFallback />}>
+            <Questionnaire />
           </Suspense>
         ),
       },
@@ -144,6 +163,8 @@ if (window.requestIdleCallback) {
     import('./pages/Dashboard.tsx').catch(() => {});
     import('./pages/SurveyBuilder.tsx').catch(() => {});
     import('./pages/AdminResourceManager.tsx').catch(() => {});
+    import('./pages/Landing.tsx').catch(() => {});
+    import('./pages/Questionnaire.tsx').catch(() => {});
   });
 }
 

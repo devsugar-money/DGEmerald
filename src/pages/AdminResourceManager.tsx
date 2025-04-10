@@ -57,7 +57,7 @@ const AdminResourceManager = () => {
     if (!user) {
       navigate('/login');
     } else if (!isAdmin) {
-      navigate('/dashboard');
+      navigate('/editor');
     }
   }, [user, isAdmin, navigate]);
 

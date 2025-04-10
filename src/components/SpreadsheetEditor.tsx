@@ -489,7 +489,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   // Main return
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto w-full">
       <div className="mb-4 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Decision Tree Spreadsheet</h2>
@@ -518,58 +518,67 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
         </div>
       </div>
 
-      <div className="border border-gray-300 rounded-lg overflow-hidden">
-        <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-          <table className="min-w-full divide-y divide-gray-200 border-collapse">
+      <div className="border border-gray-300 rounded-lg overflow-hidden w-full">
+        <div className="max-h-[calc(100vh-200px)] overflow-y-auto w-full">
+          <table className="w-full divide-y divide-gray-200 border-collapse">
             <thead className="bg-blue-600 text-white sticky top-0 z-10">
               <tr>
-                <th className="px-2 py-2 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-10">
+                <th className="px-2 py-1 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-10">
                   #
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-32">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-24">
                   <div className="flex items-center">
                     QUESTION <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-16">
+                <th className="px-2 py-1 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-16">
                   <div className="flex flex-col items-center">
                     YES <span className="text-[10px]">ANSWER</span>
                   </div>
                 </th>
-                <th className="px-2 py-2 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-16">
+                <th className="px-2 py-1 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-16">
                   <div className="flex flex-col items-center">
                     NO <span className="text-[10px]">ANSWER</span>
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-28">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-24">
                   <div className="flex items-center">
                     HINT TITLE <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-28">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-24">
                   <div className="flex items-center">
                     HINT CONTENT <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-28">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-24">
                   <div className="flex items-center">
                     LEARN TITLE <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-28">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-24">
                   <div className="flex items-center">
                     LEARN CONTENT <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-32">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-24">
                   <div className="flex items-center">
                     ACTION <ChevronDown size={14} className="ml-1" />
                   </div>
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-32">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider border border-blue-700 w-24">
                   <div className="flex items-center">
                     ANSWER TERMINATE <ChevronDown size={14} className="ml-1" />
                   </div>
+                </th>
+                <th className="px-2 py-1 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-20">
+                  ACTION TRIGGER
+                </th>
+                <th className="px-2 py-1 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-20">
+                  TERM. TRIGGER
+                </th>
+                <th className="px-2 py-1 text-center text-xs font-medium uppercase tracking-wider border border-blue-700 w-16">
+                  UPLOAD?
                 </th>
               </tr>
             </thead>
@@ -577,7 +586,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
               {/* Insert button above first row if needed */}
               {!showInsertForm && insertIndex === 0 && (
                 <tr className="bg-blue-50">
-                  <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
+                  <td colSpan={14} className="px-2 py-1 border border-blue-100 text-center">
                     <button
                       className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
                       onClick={() => {
@@ -598,7 +607,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                   {/* Insert row between existing rows */}
                   {!showInsertForm && insertIndex === index && (
                     <tr className="bg-blue-50">
-                      <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
+                      <td colSpan={14} className="px-2 py-1 border border-blue-100 text-center">
                         <button
                           className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
                           onClick={() => {
@@ -619,7 +628,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                   {/* Insert form row */}
                   {showInsertForm && insertIndex === index && (
                     <tr className="bg-blue-50" id={`insert-form-${index}`}>
-                      <td colSpan={10} className="px-2 py-2 border border-gray-300">
+                      <td colSpan={14} className="px-2 py-2 border border-gray-300">
                         <div className="flex items-center space-x-2">
                           <input
                             type="text"
@@ -657,7 +666,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
                   {/* Main question row */}
                   <tr
-                    className={`${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} transition-colors`}
+                    className={`${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} transition-colors text-xs`}
+                    style={{ height: '30px' }} /* Force reduced row height */
                     draggable={true}
                     onDragStart={(e) => handleRowDragStart(e, index)}
                     onDragOver={handleRowDragOver}
@@ -667,7 +677,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                     data-index={index}
                   >
                     {/* ORDER # */}
-                    <td className="px-2 py-1 text-center border border-gray-300 w-10">
+                    <td className="px-2 py-0.5 text-center border border-gray-300 w-10 leading-tight">
                       <div className="flex items-center justify-center cursor-move">
                         <span className="font-mono text-xs text-gray-500 mr-1">{index + 1}</span>
                         <ArrowUpDown size={14} className="text-gray-500" />
@@ -675,7 +685,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                     </td>
 
                     {/* QUESTION TEXT (click to open modal) */}
-                    <td className="px-2 py-1 whitespace-normal border border-gray-300 w-32">
+                    <td className="px-2 py-0.5 whitespace-normal border border-gray-300 w-24 leading-tight">
                       <div className="flex">
                         <div
                           className="text-sm cursor-pointer hover:text-indigo-600 flex-grow overflow-hidden whitespace-nowrap text-ellipsis"
@@ -716,7 +726,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
                     {/* YES LEADS TO */}
                     <td
-                      className="px-2 py-1 text-center border border-gray-300 w-16 cursor-pointer"
+                      className="px-2 py-0.5 text-center border border-gray-300 w-16 cursor-pointer leading-tight"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDirectEditCell({ rowId: row.id, field: 'yes_leads_to' });
@@ -729,7 +739,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
                     {/* NO LEADS TO */}
                     <td
-                      className="px-2 py-1 text-center border border-gray-300 w-16 cursor-pointer"
+                      className="px-2 py-0.5 text-center border border-gray-300 w-16 cursor-pointer leading-tight"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDirectEditCell({ rowId: row.id, field: 'no_leads_to' });
@@ -742,7 +752,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
                     {/* HINT TITLE (open resource modal) */}
                     <td
-                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      className="px-2 py-0.5 border border-gray-300 w-24 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis leading-tight"
                       onClick={() => openResourceModal(row.id, 'hints_title')}
                       title="Click to select a hint title"
                     >
@@ -751,7 +761,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
                     {/* HINT CONTENT (open resource modal) */}
                     <td
-                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      className="px-2 py-0.5 border border-gray-300 w-24 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis leading-tight"
                       onClick={() => openResourceModal(row.id, 'hints_content')}
                       title="Click to select a hint content"
                     >
@@ -760,7 +770,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
                     {/* LEARN TITLE (open resource modal) */}
                     <td
-                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      className="px-2 py-0.5 border border-gray-300 w-24 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis leading-tight"
                       onClick={() => openResourceModal(row.id, 'learn_title')}
                       title="Click to select a learn title"
                     >
@@ -769,85 +779,89 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
                     {/* LEARN CONTENT (open resource modal) */}
                     <td
-                      className="px-2 py-1 border border-gray-300 w-28 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis"
+                      className="px-2 py-0.5 border border-gray-300 w-24 cursor-pointer overflow-hidden whitespace-nowrap text-ellipsis leading-tight"
                       onClick={() => openResourceModal(row.id, 'learn_content')}
                       title="Click to select a learn content"
                     >
                       {renderCellPreview(getResourceContentPreview('learn', row.learn_content_id))}
                     </td>
 
-                    {/* ACTION (always clickable + triggers) */}
-                    <td className="px-2 py-1 border border-gray-300 w-32">
-                      {/* Click to edit action content */}
-                      <div
-                        className="w-full text-left p-2 bg-white border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openCellModal(row.id, 'action_content', getActionContent(row));
+                    {/* ACTION (click to open modal) */}
+                    <td className="px-2 py-0.5 border border-gray-300 w-24 leading-tight">
+                      <button
+                        className="text-sm text-indigo-600 hover:underline flex items-center gap-1 p-1 rounded hover:bg-indigo-50"
+                        onClick={() => {
+                          // Fetch full content using helper before opening modal
+                          const fullContent = getActionContent(row);
+                          openCellModal(row.id, 'action', fullContent);
                         }}
+                        title="Edit Action Content"
                       >
-                        {renderCellPreview(getActionContent(row))}
-                      </div>
-                      {/* Action trigger */}
-                      <div className="mt-2">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Trigger action on:
-                        </label>
-                        <select
-                          value={row.action_trigger || ''}
-                          onChange={(e) =>
-                            handleCellChange(row.id, 'action_trigger', e.target.value || null)
-                          }
-                          className="w-full border rounded-md p-1 text-sm"
-                        >
-                          <option value="">No trigger (always include)</option>
-                          <option value="yes">"Yes" answer</option>
-                          <option value="no">"No" answer</option>
-                        </select>
-                      </div>
+                        <FileText size={14} />
+                        {getActionContent(row) ? 'View/Edit' : 'Set'}
+                      </button>
                     </td>
 
-                    {/* TERMINATE (always clickable + triggers + hasupload) */}
-                    <td className="px-2 py-1 border border-gray-300 w-32">
-                      {/* Click to edit terminate content */}
-                      <div
-                        className="w-full text-left p-2 bg-white border border-blue-300 rounded hover:bg-blue-50 mb-2 cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openCellModal(row.id, 'terminate_content', getTerminateContent(row));
+                    {/* ANSWER TERMINATE (click to open modal) */}
+                    <td className="px-2 py-0.5 border border-gray-300 w-24 leading-tight">
+                      <button
+                        className="text-sm text-indigo-600 hover:underline flex items-center gap-1 p-1 rounded hover:bg-indigo-50"
+                        onClick={() => {
+                          // Fetch full content using helper before opening modal
+                          const fullContent = getTerminateContent(row);
+                          openCellModal(row.id, 'terminate', fullContent);
                         }}
+                        title="Edit Terminate Content"
                       >
-                        {renderCellPreview(getTerminateContent(row))}
-                      </div>
-                      {/* Terminate trigger */}
-                      <div className="mt-2">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Trigger terminate on:
-                        </label>
-                        <select
-                          value={row.terminate_trigger || ''}
-                          onChange={(e) =>
-                            handleCellChange(row.id, 'terminate_trigger', e.target.value || null)
-                          }
-                          className="w-full border rounded-md p-1 text-sm"
-                        >
-                          <option value="">No trigger</option>
-                          <option value="yes">"Yes" answer</option>
-                          <option value="no">"No" answer</option>
-                        </select>
-                      </div>
-                      {/* hasupload checkbox */}
-                      <div className="mt-3">
-                        <label className="flex items-center text-xs font-medium text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={row.hasupload || false}
-                            onChange={(e) => handleCellChange(row.id, 'hasupload', e.target.checked)}
-                            className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          Requires file upload
-                        </label>
-                      </div>
+                        <FileText size={14} />
+                        {getTerminateContent(row) ? 'View/Edit' : 'Set'}
+                      </button>
+                    </td>
+
+                    {/* ACTION TRIGGER */}
+                    <td className="px-2 py-0.5 border border-gray-300 w-20 leading-tight">
+                      <select
+                        value={row.action_trigger || ''}
+                        onChange={(e) =>
+                          handleCellChange(row.id, 'action_trigger', e.target.value || null)
+                        }
+                        onClick={(e) => e.stopPropagation()} // Prevent row click logic if any
+                        className="w-full border-gray-300 rounded-md shadow-sm p-1 text-xs focus:ring-indigo-500 focus:border-indigo-500"
+                        title="Select when the Action content is shown"
+                      >
+                        <option value="">Always</option>
+                        <option value="yes">On Yes</option>
+                        <option value="no">On No</option>
+                      </select>
+                    </td>
+
+                    {/* TERMINATE TRIGGER */}
+                    <td className="px-2 py-0.5 border border-gray-300 w-20 leading-tight">
+                      <select
+                        value={row.terminate_trigger || ''}
+                        onChange={(e) =>
+                          handleCellChange(row.id, 'terminate_trigger', e.target.value || null)
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full border-gray-300 rounded-md shadow-sm p-1 text-xs focus:ring-indigo-500 focus:border-indigo-500"
+                        title="Select when the Terminate content is shown"
+                      >
+                        <option value="">Never</option> {/* Default should be no trigger */}
+                        <option value="yes">On Yes</option>
+                        <option value="no">On No</option>
+                      </select>
+                    </td>
+
+                    {/* HAS UPLOAD */}
+                    <td className="px-2 py-0.5 border border-gray-300 w-16 leading-tight text-center">
+                      <input
+                        type="checkbox"
+                        checked={row.hasupload || false}
+                        onChange={(e) => handleCellChange(row.id, 'hasupload', e.target.checked)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        title="Does answering this question require a file upload?"
+                      />
                     </td>
                   </tr>
                 </React.Fragment>
@@ -858,7 +872,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                 <>
                   {!showInsertForm && (
                     <tr className="bg-blue-50">
-                      <td colSpan={10} className="px-2 py-1 border border-blue-100 text-center">
+                      <td colSpan={14} className="px-2 py-1 border border-blue-100 text-center">
                         <button
                           className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-medium hover:bg-indigo-200 inline-flex items-center"
                           onClick={() => {
@@ -878,7 +892,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                   )}
                   {showInsertForm && insertIndex === rows.length && (
                     <tr className="bg-blue-50" id="insert-form-end">
-                      <td colSpan={10} className="px-2 py-2 border border-gray-300">
+                      <td colSpan={14} className="px-2 py-2 border border-gray-300">
                         <div className="flex items-center space-x-2">
                           <input
                             type="text"
