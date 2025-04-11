@@ -5,6 +5,7 @@ import { useSessionStore } from '../store/sessionStore';
 import { supabase } from '../lib/supabase';
 import { HelpCircle, BookOpen, RotateCcw, Trees } from '../components/IconProvider';
 import Modal from '../components/Modal';
+import FileUpload from '../components/FileUpload';
 
 const TakeSurvey = () => {
   const { id } = useParams<{ id: string }>();
@@ -179,9 +180,10 @@ const TakeSurvey = () => {
       <div className="relative max-w-2xl mx-auto">
         {/* Question Box (Less Wide) */}
         <div className="bg-white rounded-card shadow-card p-6 md:p-8 mb-6 min-h-[calc(100%*1.93)] flex flex-col">
-          <h2 className="text-xl md:text-2xl font-medium text-primary-700 mb-6 md:mb-8">
-            {currentQuestion.text}
-          </h2>
+          <h2 
+            className="text-2xl md:text-3xl font-bold text-gray-900 prose prose-xl max-w-none"
+            dangerouslySetInnerHTML={{ __html: currentQuestion.text || '' }}
+          />
           
           {/* Answer buttons with fully rounded corners */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-auto">
@@ -211,6 +213,18 @@ const TakeSurvey = () => {
               <BookOpen className="h-5 w-5 mr-2 text-tertiary-600 flex-shrink-0" />
               <span>{getLearnTitle()}</span>
             </button>
+          </div>
+        )}
+        
+        {/* Conditional File Upload based on terminateMessage and valid terminate_id */}
+        {terminateMessage && currentQuestionWithData?.terminate_id && (
+          <div className="my-6 max-w-2xl mx-auto px-4 md:px-0">
+            {/* TODO: Decide if FileUpload needs additional props based on terminateMessage content or type */}
+            <FileUpload
+              sessionId={activeSurvey.id}
+              terminateId={currentQuestionWithData.terminate_id} // Now guaranteed to be defined
+              // onUploadSuccess={(filePath) => console.log('Upload successful:', filePath)}
+            />
           </div>
         )}
       </div>
@@ -295,8 +309,8 @@ const TakeSurvey = () => {
       
       {/* Learn Modal */}
       <Modal
-        isOpen={isLearnModalOpen}
-        onClose={() => setIsLearnModalOpen(false)}
+        isOpen={isLearnModalOpen} 
+        onClose={() => setIsLearnModalOpen(false)} 
         title={learnContent?.title || 'Learn More'}
       >
         <div className="prose max-w-none">

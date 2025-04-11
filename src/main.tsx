@@ -6,6 +6,10 @@ import './styles/root-reset.css';
 import './index.css';
 import { IconProvider } from './components/IconProvider';
 import AdminRoute from './components/AdminRoute';
+import { initializeStorage } from './lib/storage';
+
+// Initialize Supabase Storage Bucket (fire and forget)
+initializeStorage();
 
 // Loading Fallback
 const LoadingFallback = () => (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useSurveyStore } from '../store/surveyStore';
-import { Plus, AlertCircle, ChevronDown, ArrowUpDown, CheckCircle, Trash2, FileText } from '../components/IconProvider';
+import { Plus, ChevronDown, ArrowUpDown, CheckCircle, Trash2, FileText } from '../components/IconProvider';
 import Modal from './Modal';
 import Notepad from './Notepad';
 import { ExtendedQuestion } from '../types/question';
@@ -61,7 +61,6 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   }));
 
   const [rows, setRows] = useState<Array<any>>([]);
-  const [hasChanges, setHasChanges] = useState<Record<string, boolean>>({});
   const [insertIndex, setInsertIndex] = useState<number | null>(null);
   const [showInsertForm, setShowInsertForm] = useState(false);
   const [newQuestionText, setNewQuestionText] = useState('');
@@ -170,19 +169,11 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   // Auto-save every 60 seconds
   useEffect(() => {
     const autoSaveInterval = setInterval(() => {
-      const rowsWithChanges = Object.keys(hasChanges).filter((id) => hasChanges[id]);
-      if (rowsWithChanges.length > 0) {
-        const rowToSave = rowsWithChanges[0];
-        handleSaveRow(rowToSave).then(() => {
-          setLastSaved(new Date());
-          setShowSavedMessage(true);
-          setTimeout(() => setShowSavedMessage(false), 3000);
-        });
-      }
+      // Removed rowsWithChanges logic
     }, 60000);
 
     return () => clearInterval(autoSaveInterval);
-  }, [hasChanges]);
+  }, []);
 
   useEffect(() => {
     if (showSavedMessage) {
@@ -279,15 +270,13 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   // Cell changes
   // ─────────────────────────────────────────────────────────────────────────────
   const handleCellChange = (id: string, field: string, value: any) => {
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          return { ...r, [field]: value };
-        }
-        return r;
-      })
+    setRows((prevRows) =>
+      prevRows.map((row) =>
+        row.id === id ? { ...row, [field]: value } : row
+      )
     );
-    setHasChanges((prev) => ({ ...prev, [id]: true }));
+    // Immediately update the question in the store (Auto-save)
+    updateQuestion(id, { [field]: value });
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -300,12 +289,6 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
       setShowDeleteConfirm(false);
       setDeleteConfirmId(null);
-
-      setHasChanges((prev) => {
-        const newObj = { ...prev };
-        delete newObj[id];
-        return newObj;
-      });
     } catch (error) {
       console.error('Error deleting row:', error);
     }
@@ -334,7 +317,6 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
       // Update the DB immediately for question text, action_content, or terminate_content
       await updateQuestion(rowIdToSave, { [currentCellField]: currentCellContent });
-      setHasChanges((prev) => ({ ...prev, [rowIdToSave]: false }));
       setLastSaved(new Date());
       setShowSavedMessage(true);
     } catch (error) {
@@ -372,7 +354,6 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
 
       await updateQuestion(id, updatesPayload);
 
-      setHasChanges((prev) => ({ ...prev, [id]: false }));
       setLastSaved(new Date());
       setShowSavedMessage(true);
     } catch (error) {
@@ -954,15 +935,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
       </div>
 
       {/* Unsaved changes warning */}
-      {hasChanges && Object.values(hasChanges).some(Boolean) && (
-        <div className="mt-4 bg-amber-50 p-3 rounded-md border border-amber-200 flex items-center">
-          <AlertCircle size={18} className="text-amber-500 mr-2" />
-          <span className="text-amber-700 text-sm">
-            You have unsaved changes. They will auto-save every minute, or when you close the editor
-            modals.
-          </span>
-        </div>
-      )}
+      {/* Removed unsaved changes warning */}
+
       {lastSaved && (
         <div className="mt-2 text-xs text-gray-500 text-right">
           Last saved: {lastSaved.toLocaleTimeString()}
