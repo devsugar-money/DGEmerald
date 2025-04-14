@@ -88,10 +88,10 @@ section {
 }
 
 .section-title {
-  font-size: clamp(2rem, 4vw, 3rem);
-  font-weight: 600;
+  font-size: clamp(1.8rem, 2.5vw, 2.1rem);
+  font-weight: 500;
   line-height: 1.2;
-  margin-bottom: var(--spacing-md);
+  /* margin-bottom: var(--spacing-sm); */
   letter-spacing: -0.02em;
 }
 
@@ -100,12 +100,12 @@ section {
 }
 
 .hero-subtitle, .section-subtitle {
-  font-size: clamp(1.2rem, 2vw, 1.5rem);
+  font-size: clamp(1.25rem, 2vw, 1.25rem);
   font-weight: 400;
   line-height: 1.4;
   margin-bottom: var(--spacing-md);
   color: var(--accent-color);
-  max-width: 700px;
+  /* max-width: 700px; */
   margin-left: auto;
   margin-right: auto;
 }
