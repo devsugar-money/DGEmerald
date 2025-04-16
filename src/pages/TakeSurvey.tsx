@@ -182,7 +182,7 @@ const TakeSurvey = () => {
         });
         return null;
       })()}
-      {terminateMessage && currentQuestionWithData?.terminate_id && (
+      {currentQuestionWithData?.hasupload === true && currentQuestionWithData?.terminate?.content && currentQuestionWithData?.terminate_id && (
         <div className="my-4 max-w-2xl mx-auto px-4 md:px-0">
           <FileUpload
             sessionId={activeSurvey.id}
@@ -246,7 +246,7 @@ const TakeSurvey = () => {
                   key={response.id}
                   className={`text-xs px-2.5 py-1 rounded-full cursor-pointer flex items-center border
                   ${response.answer ? 'bg-success-50 text-success-700 border-success-200' : 'bg-red-50 text-red-700 border-red-200'}`}
-                  onClick={() => navigateToQuestion(response.question_id)}
+                  onClick={() => response?.question_id && navigateToQuestion(response.question_id)}
                 >
                   <span className="truncate max-w-[120px]">{question.text}</span>
                   <span className="ml-2 bg-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">

@@ -46,6 +46,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
     actions,
     terminates,
     createQuestion,
+    createAction,
+    createTerminate,
   } = useSurveyStore((state) => ({
     questions: state.questions,
     updateQuestion: state.updateQuestion,
@@ -58,6 +60,8 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
     actions: state.actions,
     terminates: state.terminates,
     createQuestion: state.createQuestion,
+    createAction: state.createAction,
+    createTerminate: state.createTerminate,
   }));
 
   const [rows, setRows] = useState<Array<any>>([]);
@@ -72,6 +76,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   const [currentCellContent, setCurrentCellContent] = useState('');
   const [currentCellField, setCurrentCellField] = useState('');
   const [currentRowId, setCurrentRowId] = useState('');
+  const [currentModalContext, setCurrentModalContext] = useState('');
 
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -297,10 +302,11 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
   // ─────────────────────────────────────────────────────────────────────────────
   // Rich-text cell modal (question text, action_content, terminate_content)
   // ─────────────────────────────────────────────────────────────────────────────
-  const openCellModal = (rowId: string, field: string, content: string) => {
+  const openCellModal = (rowId: string, field: string, content: string, context: string) => {
     setCurrentRowId(rowId);
     setCurrentCellField(field);
     setCurrentCellContent(content);
+    setCurrentModalContext(context);
     setShowCellModal(true);
   };
 
@@ -314,9 +320,32 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
       setCurrentRowId('');
       setCurrentCellField('');
       setCurrentCellContent('');
+      setCurrentModalContext('');
 
-      // Update the DB immediately for question text, action_content, or terminate_content
-      await updateQuestion(rowIdToSave, { [currentCellField]: currentCellContent });
+      if (currentCellField === 'content') {
+        // Determine if we're saving an action or terminate based on the modal context
+        if (currentModalContext === 'action') {
+          // Create new action in actions table
+          const newAction = await createAction(currentCellContent);
+          // Update question with new action ID
+          await updateQuestion(rowIdToSave, {
+            action_id: newAction.id,
+            action_trigger: null
+          });
+        } else if (currentModalContext === 'terminate') {
+          // Create new terminate in terminates table
+          const newTerminate = await createTerminate(currentCellContent);
+          // Update question with new terminate ID
+          await updateQuestion(rowIdToSave, {
+            terminate_id: newTerminate.id,
+            terminate_trigger: null
+          });
+        }
+      } else {
+        // For other fields, update directly
+        await updateQuestion(rowIdToSave, { [currentCellField]: currentCellContent });
+      }
+      
       setLastSaved(new Date());
       setShowSavedMessage(true);
     } catch (error) {
@@ -670,7 +699,7 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                       <div className="flex">
                         <div
                           className="text-sm cursor-pointer hover:text-indigo-600 flex-grow overflow-hidden whitespace-nowrap text-ellipsis"
-                          onClick={() => openCellModal(row.id, 'text', row.text)}
+                          onClick={() => openCellModal(row.id, 'text', row.text, '')}
                         >
                           {renderCellPreview(row.text)}
                         </div>
@@ -771,10 +800,23 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                     <td className="px-2 py-0.5 border border-gray-300 w-24 leading-tight">
                       <button
                         className="text-sm text-indigo-600 hover:underline flex items-center gap-1 p-1 rounded hover:bg-indigo-50"
-                        onClick={() => {
-                          // Fetch full content using helper before opening modal
-                          const fullContent = getActionContent(row);
-                          openCellModal(row.id, 'action', fullContent);
+                        onClick={async () => {
+                          try {
+                            const content = getActionContent(row);
+                            // If content exists, create a new action
+                            if (content) {
+                              const newAction = await createAction(content);
+                              // Update the question with the new action ID
+                              await updateQuestion(row.id, { 
+                                action_id: newAction.id,
+                                action_trigger: null // Reset trigger when updating action
+                              });
+                            }
+                            // Open modal to edit the content
+                            openCellModal(row.id, 'content', content || '', 'action');
+                          } catch (error) {
+                            console.error('Error handling action:', error);
+                          }
                         }}
                         title="Edit Action Content"
                       >
@@ -787,10 +829,23 @@ const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({ surveyId }) => {
                     <td className="px-2 py-0.5 border border-gray-300 w-24 leading-tight">
                       <button
                         className="text-sm text-indigo-600 hover:underline flex items-center gap-1 p-1 rounded hover:bg-indigo-50"
-                        onClick={() => {
-                          // Fetch full content using helper before opening modal
-                          const fullContent = getTerminateContent(row);
-                          openCellModal(row.id, 'terminate', fullContent);
+                        onClick={async () => {
+                          try {
+                            const content = getTerminateContent(row);
+                            // If content exists, create a new terminate
+                            if (content) {
+                              const newTerminate = await createTerminate(content);
+                              // Update the question with the new terminate ID
+                              await updateQuestion(row.id, { 
+                                terminate_id: newTerminate.id,
+                                terminate_trigger: null // Reset trigger when updating terminate
+                              });
+                            }
+                            // Open modal to edit the content
+                            openCellModal(row.id, 'content', content || '', 'terminate');
+                          } catch (error) {
+                            console.error('Error handling terminate:', error);
+                          }
                         }}
                         title="Edit Terminate Content"
                       >

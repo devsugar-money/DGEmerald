@@ -16,6 +16,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
   const [success, setSuccess] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+
     if (e.target.files && e.target.files.length > 0) {
       setFile(e.target.files[0]);
       setError(null);
@@ -29,6 +30,11 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
   const handleUpload = async () => {
     if (!file) return;
 
+
+    const res = (await supabase.auth.getUser()).data.user?.id
+
+    console.log(res , "====================")
+
     setUploading(true);
     setProgress(0);
     setError(null);
@@ -36,11 +42,13 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
 
     // Ensure consistent path format, maybe sanitize file.name if needed
     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
-    const filePath = `${sessionId}/${terminateId}/${Date.now()}_${sanitizedFileName}`;
+    const filePath = `${sessionId}/${terminateId}/${Date.now()}-${sanitizedFileName}`;
+
+    console.log(filePath)
 
     try {
       const { error: uploadError } = await supabase.storage
-        .from('survey-uploads')
+        .from('survey_uploads')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false, // Set to true if you want to allow overwriting
@@ -66,7 +74,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
           file_name: file.name, // Store original file name
           file_type: file.type,
           file_size: file.size,
-          // user_id: (await supabase.auth.getUser()).data.user?.id // Optional: Link to user
+          user_id: (await supabase.auth.getUser()).data.user?.id // Optional: Link to user
         });
 
       if (dbError) {
@@ -91,8 +99,8 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
   };
 
   return (
-    <div className="file-upload" style={{ marginTop: '15px', padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }}>
-      <h4 style={{ marginTop: '0', marginBottom: '10px' }}>Upload Document (Optional)</h4>
+    <div className="file-upload shadow-lg space-y-4 border border-[#ccc]" style={{ marginTop: '15px', padding: '10px', borderRadius: '4px' }}>
+      <h4 className='font-semibold' style={{ marginTop: '0', marginBottom: '10px' }}>Upload Document (Optional)</h4>
 
       <input
         type="file"
@@ -102,9 +110,10 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
       />
 
       <button
+      className='px-6 py-2 mt-4 text-white rounded-full hover:bg-blue-700'
         onClick={handleUpload}
         disabled={!file || uploading}
-        style={{ padding: '8px 15px', cursor: 'pointer' }}
+        style={{ padding: '8px 15px', cursor: 'pointer' , backgroundColor: '#536EB7' }}
       >
         {uploading ? `Uploading... ${progress}%` : 'Upload File'}
       </button>
