@@ -30,11 +30,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
   const handleUpload = async () => {
     if (!file) return;
 
-
-    const res = (await supabase.auth.getUser()).data.user?.id
-
-    console.log(res , "====================")
-
     setUploading(true);
     setProgress(0);
     setError(null);
@@ -44,7 +39,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
     const filePath = `${sessionId}/${terminateId}/${Date.now()}-${sanitizedFileName}`;
 
-    console.log(filePath)
+    console.log('Upload path:', filePath);
 
     // Verify session ownership before insert
     const user = (await supabase.auth.getUser()).data.user;
@@ -54,10 +49,11 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
       return; // Exit if no user
     }
 
+    // Keep the validation block to ensure the session belongs to the current user
     const { data: s, error: sErr } = await supabase
       .from('sessions')
       .select('id')
-      .eq('id', sessionId)          // the value you’re about to pass
+      .eq('id', sessionId)          // the value you're about to pass
       .eq('user_id', user.id)       // must belong to this user
       .maybeSingle(); // Use maybeSingle to handle null/error gracefully
 
