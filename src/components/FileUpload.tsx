@@ -46,12 +46,40 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
 
     console.log(filePath)
 
+    // Verify session ownership before insert
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) {
+      setError('User not authenticated.');
+      setUploading(false);
+      return; // Exit if no user
+    }
+
+    const { data: s, error: sErr } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('id', sessionId)          // the value you’re about to pass
+      .eq('user_id', user.id)       // must belong to this user
+      .maybeSingle(); // Use maybeSingle to handle null/error gracefully
+
+    if (sErr || !s) {
+      console.error('Session validation error:', sErr);
+      // Log the sessionId for debugging if the validation fails
+      console.log('Invalid sessionId for insert:', sessionId);
+      setError(`Invalid session ID (${sessionId}). RLS would block the insert.`);
+      setUploading(false);
+      return; // Exit if session is invalid
+    }
+
+    console.log('Session validated for user:', user.id);
+
     try {
-      const { error: uploadError } = await supabase.storage
-        .from('survey_uploads')
+      // Upload file to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('survey-uploads') // Use the correct bucket name
         .upload(filePath, file, {
           cacheControl: '3600',
-          upsert: false, // Set to true if you want to allow overwriting
+          upsert: false,
+          contentType: file.type,
         });
 
       if (uploadError) {
@@ -64,18 +92,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ sessionId, terminateId, onUploa
 
       console.log('File uploaded to path:', filePath);
 
-      // Save upload record to database
-      // IMPORTANT: Assumes an 'uploads' table exists with these columns
-      const { error: dbError } = await supabase.from('uploads')
-        .insert({
-          session_id: String(sessionId), // Ensure string type for UUID column
-          terminate_id: String(terminateId), // Ensure string type for UUID column
-          file_path: filePath,
-          file_name: file.name, // Store original file name
-          file_type: file.type,
-          file_size: file.size,
-          user_id: (await supabase.auth.getUser()).data.user?.id // Optional: Link to user
-        });
+      // Record the upload in the database table 'uploads'
+      const { error: dbError } = await supabase.from('uploads').insert({
+        session_id: sessionId,     // verified above
+        terminate_id: terminateId, // OK if nullable
+        file_path: filePath,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size
+        // user_id has been removed as per instruction
+      });
 
       if (dbError) {
         console.error('DB Insert Error:', dbError);
