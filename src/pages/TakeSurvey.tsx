@@ -11,7 +11,7 @@ const TakeSurvey = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
   const {
-    activeSurvey, currentQuestion, progress, responses, questions,
+    activeSurvey, activeSession, currentQuestion, progress, responses, questions,
     startSurvey, answerQuestion, resetSurvey, navigateToQuestion,
     actionPlan, terminateMessage, loading, error
   } = useSessionStore();
@@ -182,10 +182,10 @@ const TakeSurvey = () => {
         });
         return null;
       })()}
-      {currentQuestionWithData?.hasupload === true && currentQuestionWithData?.terminate?.content && currentQuestionWithData?.terminate_id && (
+      {currentQuestionWithData?.hasupload === true && currentQuestionWithData?.terminate?.content && currentQuestionWithData?.terminate_id && activeSession && (
         <div className="my-4 max-w-2xl mx-auto px-4 md:px-0">
           <FileUpload
-            sessionId={activeSurvey.id}
+            sessionId={activeSession.id}
             terminateId={currentQuestionWithData.terminate_id}
             />
         </div>
